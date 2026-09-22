@@ -34,6 +34,22 @@ Alur kerja sistem membentuk *feedback loop*:
 
 ---
 
+## 🔌 Skematik & Pemetaan Pin (Wiring Diagram)
+
+Sistem menggunakan catu daya utama Adaptor 12V dengan **Emergency Stop Button** terpasang secara seri pada jalur utama VCC 12V. Tegangan kemudian diturunkan menggunakan regulator menjadi **5V** (untuk Pompa Air 5V & Modul Relay) dan **3.3V** (untuk ESP32, DHT22, dan Soil Moisture Sensor).
+
+### Pemetaan Pin GPIO ESP32:
+| Komponen Perangkat | Jenis / Fungsi | Pin Perangkat | Pin ESP32 |
+| :--- | :--- | :--- | :--- |
+| **DHT22** | Sensor Suhu & Kelembaban | Data | **GPIO 4** |
+| **Capacitive Soil Moisture v1.2** | Sensor Kelembaban Tanah | Analog Out (AOUT) | **GPIO 34** |
+| **Relay Channel 1** | Aktuator Pompa Air 5V | IN1 | **GPIO 27** |
+| **Relay Channel 2** | Aktuator Kipas DC 12V | IN2 | **GPIO 26** |
+
+*Dokumentasi lengkap dan diagram blok alur daya dapat dilihat di [hardware/README.md](hardware/README.md).*
+
+---
+
 ## ⚙️ Sistem Kendali (Dual Closed-Loop)
 Sistem menerapkan dua mekanisme kontrol tertutup:
 1.  **Kontrol Suhu:** Jika suhu **> 35°C**, ESP32 akan menyalakan kipas. Jika suhu turun hingga **≤ 28°C**, kipas dimatikan.
