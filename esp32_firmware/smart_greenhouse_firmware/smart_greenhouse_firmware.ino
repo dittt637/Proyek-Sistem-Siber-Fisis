@@ -1,14 +1,7 @@
 /*
  * Firmware Utama Smart Greenhouse (ESP32) - SCHEMATIC REVISI
  * Pembacaan Sensor & Kontrol Dual Closed-Loop + MQTT Telemetry
- * 
- * Pinout Mapping berdasarkan Schematic Revisi:
- * - DHT22 Data          : GPIO 34 (Kabel Hijau)
- * - Soil Moisture Analog: GPIO 4  (Kabel Kuning)
- * - Transistor 1 (Pompa Air 5V) : GPIO 27 (Kabel Ungu - Active HIGH)
- * - Transistor 2 (Kipas DC 12V) : GPIO 26 (Active HIGH)
- *
- * Driver: BJT Transistor (BC547 / setara) + Resistor Basis + Diode Flyback
+ * Dengan Pengandalan Auto-Reconnect WiFi & MQTT (Fail-Safe Jaringan)
  */
 
 #include <WiFi.h>
@@ -37,12 +30,34 @@ unsigned long lastMsg = 0;
 void setup_wifi() {
   delay(10);
   Serial.println("\nConnecting to WiFi...");
+  WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
   WiFi.begin(ssid, password);
+
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
   Serial.println("\nWiFi Connected! IP: " + WiFi.localIP().toString());
+}
+
+// Fungsi Reconnect WiFi jika Hotspot/WiFi mendadak mati
+void checkWiFi() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("\nWiFi Terputus! Memulai ulang sambungan WiFi...");
+    WiFi.disconnect();
+    WiFi.begin(ssid, password);
+    unsigned long startAttempt = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - startAttempt < 10000) {
+      delay(500);
+      Serial.print(".");
+    }
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("\nWiFi Berhasil Terhubung Kembali! IP: " + WiFi.localIP().toString());
+    } else {
+      Serial.println("\nWiFi belum siap, mencoba lagi...");
+    }
+  }
 }
 
 void callback(char* topic, byte* payload, unsigned int length) {
@@ -55,13 +70,12 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.println();
 }
 
-void reconnect() {
-  while (!client.connected()) {
+void reconnectMQTT() {
+  if (WiFi.status() == WL_CONNECTED && !client.connected()) {
     Serial.print("Mencoba koneksi ke MQTT Broker...");
     String clientId = "ESP32-Greenhouse-";
     clientId += String(random(0xffff), HEX);
     
-    // Last Will & Testament (LWT) untuk Fail-Safe status koneksi
     if (client.connect(clientId.c_str(), "sg/sistem/koneksi", 1, true, "OFFLINE")) {
       Serial.println(" Terhubung!");
       client.publish("sg/sistem/koneksi", "ONLINE", true);
@@ -69,8 +83,8 @@ void reconnect() {
     } else {
       Serial.print(" Gagal, rc=");
       Serial.print(client.state());
-      Serial.println(" Coba lagi dalam 5 detik.");
-      delay(5000);
+      Serial.println(" Coba lagi dalam 3 detik");
+      delay(3000);
     }
   }
 }
@@ -78,11 +92,9 @@ void reconnect() {
 void setup() {
   Serial.begin(115200);
   
-  // Inisialisasi Pin Transistor (Active HIGH)
   pinMode(TR_PUMP_PIN, OUTPUT);
   pinMode(TR_FAN_PIN, OUTPUT);
   
-  // Matikan aktuator di awal (Default OFF -> LOW)
   digitalWrite(TR_PUMP_PIN, LOW);
   digitalWrite(TR_FAN_PIN, LOW);
   
@@ -93,63 +105,58 @@ void setup() {
 }
 
 void loop() {
+  // 1. Pastikan WiFi terhubung dulu
+  checkWiFi();
+
+  // 2. Pastikan MQTT terhubung
   if (!client.connected()) {
-    reconnect();
+    reconnectMQTT();
+  } else {
+    client.loop();
   }
-  client.loop();
 
   unsigned long now = millis();
-  // Baca sensor & kontrol setiap 5 detik
   if (now - lastMsg > 5000) {
     lastMsg = now;
 
-    // 1. Baca Sensor Suhu (DHT22 pada GPIO 34)
     float temp = dht.readTemperature();
     float hum = dht.readHumidity();
 
-    // 2. Baca Sensor Kelembaban Tanah (ADC GPIO 4)
     int rawSoil = analogRead(SOIL_PIN);
-    // Konversi nilai ADC ke persentase (0% = kering, 100% = basah)
     float soilMoisturePercent = map(rawSoil, 4095, 1500, 0, 100);
     soilMoisturePercent = constrain(soilMoisturePercent, 0, 100);
 
-    if (isnan(temp) || isnan(hum)) {
-      Serial.println("Gagal membaca dari sensor DHT22!");
-      client.publish("sg/sistem/error", "DHT22_READ_ERROR");
-      return;
+    // KONTROL LOCAL TETAP BERJALAN MESKIPUN INTERNET TERPUTUS (EDGE COMPUTING)
+    if (!isnan(temp)) {
+      if (temp > 35.0) {
+        digitalWrite(TR_FAN_PIN, HIGH);
+        if (client.connected()) client.publish("sg/aktuator/kipas", "ON");
+      } else if (temp <= 28.0) {
+        digitalWrite(TR_FAN_PIN, LOW);
+        if (client.connected()) client.publish("sg/aktuator/kipas", "OFF");
+      }
     }
 
-    Serial.printf("Suhu: %.2f°C | Humidity: %.2f%% | Soil: %.2f%%\n", temp, hum, soilMoisturePercent);
-
-    // --- DUAL CLOSED-LOOP CONTROL (TRANSISTOR HIGH = ON, LOW = OFF) ---
-    // A. Kontrol Kipas (Suhu > 35°C ON, <= 28°C OFF)
-    if (temp > 35.0) {
-      digitalWrite(TR_FAN_PIN, HIGH); // Transistor ON
-      client.publish("sg/aktuator/kipas", "ON");
-    } else if (temp <= 28.0) {
-      digitalWrite(TR_FAN_PIN, LOW);  // Transistor OFF
-      client.publish("sg/aktuator/kipas", "OFF");
-    }
-
-    // B. Kontrol Pompa Air (Soil < 30% ON, >= 60% OFF)
     if (soilMoisturePercent < 30.0) {
-      digitalWrite(TR_PUMP_PIN, HIGH); // Transistor ON
-      client.publish("sg/aktuator/pompa", "ON");
+      digitalWrite(TR_PUMP_PIN, HIGH);
+      if (client.connected()) client.publish("sg/aktuator/pompa", "ON");
     } else if (soilMoisturePercent >= 60.0) {
-      digitalWrite(TR_PUMP_PIN, LOW);  // Transistor OFF
-      client.publish("sg/aktuator/pompa", "OFF");
+      digitalWrite(TR_PUMP_PIN, LOW);
+      if (client.connected()) client.publish("sg/aktuator/pompa", "OFF");
     }
 
-    // --- PUBLISH TELEMETRI KE MQTT ---
-    char strBuffer[10];
-    
-    dtostrf(temp, 1, 2, strBuffer);
-    client.publish("sg/sensor/suhu", strBuffer);
-    
-    dtostrf(hum, 1, 2, strBuffer);
-    client.publish("sg/sensor/kelembaban_udara", strBuffer);
-    
-    dtostrf(soilMoisturePercent, 1, 2, strBuffer);
-    client.publish("sg/sensor/kelembaban_tanah", strBuffer);
+    // PUBLISH DATA SENSOR JIKA MQTT TERHUBUNG
+    if (client.connected() && !isnan(temp) && !isnan(hum)) {
+      char strBuffer[10];
+      
+      dtostrf(temp, 1, 2, strBuffer);
+      client.publish("sg/sensor/suhu", strBuffer);
+      
+      dtostrf(hum, 1, 2, strBuffer);
+      client.publish("sg/sensor/kelembaban_udara", strBuffer);
+      
+      dtostrf(soilMoisturePercent, 1, 2, strBuffer);
+      client.publish("sg/sensor/kelembaban_tanah", strBuffer);
+    }
   }
 }

@@ -20,6 +20,8 @@ void setup_wifi() {
   Serial.print("Connecting to ");
   Serial.println(ssid);
 
+  WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
   WiFi.begin(ssid, password);
 
   while (WiFi.status() != WL_CONNECTED) {
@@ -33,6 +35,26 @@ void setup_wifi() {
   Serial.println(WiFi.localIP());
 }
 
+// Fungsi reconnect WiFi jika terputus
+void checkWiFi() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("\nWiFi terputus! Memulai ulang koneksi WiFi...");
+    WiFi.disconnect();
+    WiFi.begin(ssid, password);
+    unsigned long startAttempt = millis();
+    // Tunggu maksimal 10 detik untuk konek ulang ke WiFi
+    while (WiFi.status() != WL_CONNECTED && millis() - startAttempt < 10000) {
+      delay(500);
+      Serial.print(".");
+    }
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("\nWiFi Berhasil Terhubung Kembali! IP: " + WiFi.localIP().toString());
+    } else {
+      Serial.println("\nWiFi masih belum siap, akan dicoba lagi...");
+    }
+  }
+}
+
 // Fungsi yang dijalankan saat ada pesan MQTT masuk (Subscribe)
 void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("Pesan masuk di topik [");
@@ -44,24 +66,21 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.println();
 }
 
-void reconnect() {
-  // Looping sampai terhubung kembali
-  while (!client.connected()) {
+void reconnectMQTT() {
+  // Hanya coba connect MQTT jika WiFi sudah dipastikan terhubung
+  if (WiFi.status() == WL_CONNECTED && !client.connected()) {
     Serial.print("Mencoba koneksi MQTT...");
-    // Membuat Client ID acak
     String clientId = "ESP32Client-";
     clientId += String(random(0xffff), HEX);
     
-    // Mencoba terhubung (Gunakan LWT disini nantinya untuk Fail-Safe)
     if (client.connect(clientId.c_str())) {
       Serial.println("Terhubung!");
-      // Setelah terhubung, langsung subscribe ke topik aktuator
       client.subscribe("sg/aktuator/#");
     } else {
       Serial.print("Gagal, rc=");
       Serial.print(client.state());
-      Serial.println(" Coba lagi dalam 5 detik");
-      delay(5000);
+      Serial.println(" Coba lagi dalam 3 detik");
+      delay(3000);
     }
   }
 }
@@ -74,25 +93,28 @@ void setup() {
 }
 
 void loop() {
+  // 1. Cek koneksi WiFi dulu
+  checkWiFi();
+  
+  // 2. Cek koneksi MQTT
   if (!client.connected()) {
-    reconnect();
+    reconnectMQTT();
+  } else {
+    client.loop();
   }
-  client.loop();
 
   unsigned long now = millis();
-  // Mengirim data simulasi setiap 5 detik
-  if (now - lastMsg > 5000) {
+  // Mengirim data simulasi setiap 5 detik (hanya jika terhubung MQTT)
+  if (client.connected() && (now - lastMsg > 5000)) {
     lastMsg = now;
     
-    // Simulasi nilai suhu
     float suhu_dummy = random(250, 380) / 10.0; 
     char suhuString[8];
-    dtostrf(suhu_dummy, 1, 2, suhuString); // Konversi float ke string
+    dtostrf(suhu_dummy, 1, 2, suhuString);
     
     Serial.print("Publish pesan: ");
     Serial.println(suhuString);
     
-    // Publish ke topik MQTT
     client.publish("sg/sensor/suhu", suhuString);
   }
 }
