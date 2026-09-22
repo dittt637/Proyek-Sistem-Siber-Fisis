@@ -1,24 +1,26 @@
 /*
- * Firmware Utama Smart Greenhouse (ESP32)
+ * Firmware Utama Smart Greenhouse (ESP32) - SCHEMATIC REVISI
  * Pembacaan Sensor & Kontrol Dual Closed-Loop + MQTT Telemetry
  * 
- * Pinout Mapping berdasarkan Wiring Diagram:
- * - DHT22 Data          : GPIO 4
- * - Soil Moisture Analog: GPIO 34
- * - Relay 1 (Pompa 5V)  : GPIO 27
- * - Relay 2 (Kipas 12V) : GPIO 26
+ * Pinout Mapping berdasarkan Schematic Revisi:
+ * - DHT22 Data          : GPIO 34 (Kabel Hijau)
+ * - Soil Moisture Analog: GPIO 4  (Kabel Kuning)
+ * - Transistor 1 (Pompa Air 5V) : GPIO 27 (Kabel Ungu - Active HIGH)
+ * - Transistor 2 (Kipas DC 12V) : GPIO 26 (Active HIGH)
+ *
+ * Driver: BJT Transistor (BC547 / setara) + Resistor Basis + Diode Flyback
  */
 
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <DHT.h>
 
-// --- KONFIGURASI PIN GPIO ---
-#define DHTPIN          4
+// --- KONFIGURASI PIN GPIO (SCHEMATIC REVISI) ---
+#define DHTPIN          34
 #define DHTTYPE         DHT22
-#define SOIL_PIN        34
-#define RELAY_PUMP_PIN  27
-#define RELAY_FAN_PIN   26
+#define SOIL_PIN        4
+#define TR_PUMP_PIN     27
+#define TR_FAN_PIN      26
 
 // --- KONFIGURASI WIFI & MQTT ---
 const char* ssid = "NAMA_WIFI_ANDA";
@@ -62,7 +64,6 @@ void reconnect() {
     // Last Will & Testament (LWT) untuk Fail-Safe status koneksi
     if (client.connect(clientId.c_str(), "sg/sistem/koneksi", 1, true, "OFFLINE")) {
       Serial.println(" Terhubung!");
-      // Notify System Status ONLINE
       client.publish("sg/sistem/koneksi", "ONLINE", true);
       client.subscribe("sg/aktuator/#");
     } else {
@@ -77,13 +78,13 @@ void reconnect() {
 void setup() {
   Serial.begin(115200);
   
-  // Inisialisasi Pin Relay (ACTIVE LOW / HIGH disesuaikan dengan modul relay)
-  pinMode(RELAY_PUMP_PIN, OUTPUT);
-  pinMode(RELAY_FAN_PIN, OUTPUT);
+  // Inisialisasi Pin Transistor (Active HIGH)
+  pinMode(TR_PUMP_PIN, OUTPUT);
+  pinMode(TR_FAN_PIN, OUTPUT);
   
-  // Matikan aktuator di awal (Default OFF)
-  digitalWrite(RELAY_PUMP_PIN, HIGH);
-  digitalWrite(RELAY_FAN_PIN, HIGH);
+  // Matikan aktuator di awal (Default OFF -> LOW)
+  digitalWrite(TR_PUMP_PIN, LOW);
+  digitalWrite(TR_FAN_PIN, LOW);
   
   dht.begin();
   setup_wifi();
@@ -102,11 +103,11 @@ void loop() {
   if (now - lastMsg > 5000) {
     lastMsg = now;
 
-    // 1. Baca Sensor Suhu (DHT22)
+    // 1. Baca Sensor Suhu (DHT22 pada GPIO 34)
     float temp = dht.readTemperature();
     float hum = dht.readHumidity();
 
-    // 2. Baca Sensor Kelembaban Tanah (ADC 0 - 4095)
+    // 2. Baca Sensor Kelembaban Tanah (ADC GPIO 4)
     int rawSoil = analogRead(SOIL_PIN);
     // Konversi nilai ADC ke persentase (0% = kering, 100% = basah)
     float soilMoisturePercent = map(rawSoil, 4095, 1500, 0, 100);
@@ -120,22 +121,22 @@ void loop() {
 
     Serial.printf("Suhu: %.2f°C | Humidity: %.2f%% | Soil: %.2f%%\n", temp, hum, soilMoisturePercent);
 
-    // --- DUAL CLOSED-LOOP CONTROL ---
+    // --- DUAL CLOSED-LOOP CONTROL (TRANSISTOR HIGH = ON, LOW = OFF) ---
     // A. Kontrol Kipas (Suhu > 35°C ON, <= 28°C OFF)
     if (temp > 35.0) {
-      digitalWrite(RELAY_FAN_PIN, LOW); // Relay ON
+      digitalWrite(TR_FAN_PIN, HIGH); // Transistor ON
       client.publish("sg/aktuator/kipas", "ON");
     } else if (temp <= 28.0) {
-      digitalWrite(RELAY_FAN_PIN, HIGH); // Relay OFF
+      digitalWrite(TR_FAN_PIN, LOW);  // Transistor OFF
       client.publish("sg/aktuator/kipas", "OFF");
     }
 
     // B. Kontrol Pompa Air (Soil < 30% ON, >= 60% OFF)
     if (soilMoisturePercent < 30.0) {
-      digitalWrite(RELAY_PUMP_PIN, LOW); // Relay ON
+      digitalWrite(TR_PUMP_PIN, HIGH); // Transistor ON
       client.publish("sg/aktuator/pompa", "ON");
     } else if (soilMoisturePercent >= 60.0) {
-      digitalWrite(RELAY_PUMP_PIN, HIGH); // Relay OFF
+      digitalWrite(TR_PUMP_PIN, LOW);  // Transistor OFF
       client.publish("sg/aktuator/pompa", "OFF");
     }
 

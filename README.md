@@ -34,19 +34,19 @@ Alur kerja sistem membentuk *feedback loop*:
 
 ---
 
-## 🔌 Skematik & Pemetaan Pin (Wiring Diagram)
+## 🔌 Skematik & Pemetaan Pin (Schematic Revisi)
 
-Sistem menggunakan catu daya utama Adaptor 12V dengan **Emergency Stop Button** terpasang secara seri pada jalur utama VCC 12V. Tegangan kemudian diturunkan menggunakan regulator menjadi **5V** (untuk Pompa Air 5V & Modul Relay) dan **3.3V** (untuk ESP32, DHT22, dan Soil Moisture Sensor).
+Sistem menggunakan catu daya utama Adaptor 12V dengan **Rocker Switch (On/Off)** pada jalur utama VCC 12V. Tegangan diturunkan menggunakan modul **LM2596 Buck Converter** menjadi **5V** (untuk daya ESP32 Pin VIN & Pompa Air 5V). Aktuator dikendalikan menggunakan **Driver Transistor NPN (BC547)**.
 
-### Pemetaan Pin GPIO ESP32:
+### Pemetaan Pin GPIO ESP32 (Schematic Revisi):
 | Komponen Perangkat | Jenis / Fungsi | Pin Perangkat | Pin ESP32 |
 | :--- | :--- | :--- | :--- |
-| **DHT22** | Sensor Suhu & Kelembaban | Data | **GPIO 4** |
-| **Capacitive Soil Moisture v1.2** | Sensor Kelembaban Tanah | Analog Out (AOUT) | **GPIO 34** |
-| **Relay Channel 1** | Aktuator Pompa Air 5V | IN1 | **GPIO 27** |
-| **Relay Channel 2** | Aktuator Kipas DC 12V | IN2 | **GPIO 26** |
+| **DHT22** | Sensor Suhu & Kelembaban | Data | **GPIO 34** |
+| **Capacitive Soil Moisture v1.2** | Sensor Kelembaban Tanah | Analog Out (AOUT) | **GPIO 4** |
+| **Driver Transistor 1** | Aktuator Pompa Air 5V | Base (B) via Resistor | **GPIO 27** |
+| **Driver Transistor 2** | Aktuator Kipas DC 12V | Base (B) via Resistor | **GPIO 26** |
 
-*Dokumentasi lengkap dan diagram blok alur daya dapat dilihat di [hardware/README.md](hardware/README.md).*
+*Dokumentasi lengkap skematik revisi dan diagram alur daya dapat dilihat di [hardware/README.md](hardware/README.md).*
 
 ---
 
