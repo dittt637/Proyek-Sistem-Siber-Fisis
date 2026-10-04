@@ -26,43 +26,27 @@ Fondasi sistem siber dan fisik telah berhasil dibangun dan diuji secara terpisah
 Dokumentasi proses pengerjaan dibagi berdasarkan pembagian tugas tiap anggota:
 
 #### 1. Hardware & Mechanical System (Bagus Satria Priambodo)
-* **Deskripsi Pengerjaan:**
-  * Merancang skematik pengkabelan sistem (*Schematic Revisi*) dengan mengintegrasikan modul LM2596 Buck Converter dan rangkaian transistor BJT sebagai pengganti relay.
-  * Melakukan perakitan jalur catu daya 12V, 5V, dan 3.3V pada breadboard serta instalasi saklar pengaman (*Rocker Switch*).
-  * Menguji aktuator Kipas DC 12V dan Pompa Air Mini 5V.
+* **Deskripsi Pengerjaan:** Merancang skematik pengkabelan sistem (*Schematic Revisi*) dengan mengintegrasikan modul LM2596 Buck Converter dan rangkaian transistor BJT sebagai pengganti relay. Melakukan perakitan jalur catu daya 12V, 5V, dan 3.3V pada breadboard serta instalasi saklar pengaman (*Rocker Switch*), dan menguji aktuator Kipas DC 12V serta Pompa Air Mini 5V.
 * **Dokumentasi:** *(Foto perakitan breadboard & skematik)*
 
 #### 2. Embedded & Control System (Muhammad Harits Arrosyid)
-* **Deskripsi Pengerjaan:**
-  * Menulis dan mengembangkan firmware kontrol ESP32 menggunakan Arduino IDE.
-  * Mengimplementasikan pembacaan sensor DHT22 (suhu udara) dan sensor Soil Moisture kapasitif.
-  * Melakukan eksperimen kalibrasi nilai ADC sensor tanah pada kondisi kering dan basah.
-  * Mengintegrasikan algoritma kontrol *Dual Closed-Loop* untuk otomatisasi kipas dan pompa air.
+* **Deskripsi Pengerjaan:** Menulis dan mengembangkan firmware kontrol ESP32 menggunakan Arduino IDE, mengimplementasikan pembacaan sensor DHT22 (suhu udara) dan sensor Soil Moisture kapasitif, melakukan eksperimen kalibrasi nilai ADC sensor tanah pada kondisi kering dan basah, serta mengintegrasikan algoritma kontrol *Dual Closed-Loop* untuk otomatisasi kipas dan pompa air.
 * **Dokumentasi:** *(Foto proses pemrograman & pengujian sensor)*
 
 #### 3. Network Communication & IoT (Aditya Rahman)
-* **Deskripsi Pengerjaan:**
-  * **Tahap 1 (Simulasi / Mock Testing):** Merancang arsitektur komunikasi dan struktur topik hierarkis (`sg/sensor/...`, `sg/aktuator/...`, `sg/sistem/...`) serta menguji konsep Publish/Subscribe menggunakan aplikasi MQTTX Client.
-  * **Tahap 2 (Integrasi Hardware ke Broker):** Mengunggah firmware ke ESP32 fisik via USB-TTL, menghubungkannya ke WiFi lokal, dan memverifikasi pengiriman data telemetri periodik ke Cloud Broker `broker.emqx.io`.
-  * **Tahap 3 (Komunikasi 2 Arah & Fail-Safe):** Menguji penerimaan perintah aktuator (*Subscribe*) dari luar (`sg/aktuator/kipas : ON`) serta memverifikasi ketahanan jaringan dengan fitur *Auto-Reconnect* otomatis saat WiFi drop.
+* **Deskripsi Pengerjaan:** Melakukan perancangan struktur topik dan simulasi awal (*Mock Testing*) menggunakan aplikasi MQTTX Client, dilanjutkan dengan pengunggahan firmware komunikasi ke mikrokontroler fisik ESP32 via USB-TTL untuk pengiriman telemetri periodik ke Cloud Broker `broker.emqx.io`. Tahap akhir mencakup pengujian respon kendali dua arah (*Subscribe*) serta verifikasi ketahanan jaringan melalui mekanisme pemulihan koneksi otomatis (*Auto-Reconnect*) saat sinyal WiFi terputus.
 * **Dokumentasi:** *(Tangkapan layar Serial Monitor Arduino IDE bersisian dengan MQTTX Client dari presentasi PPT)*
 
 #### 4. Monitoring Interface & Evaluation (Fathoni Ibra A A)
-* **Deskripsi Pengerjaan:**
-  * Menentukan parameter pemantauan dan format data telemetri dari topik-topik MQTT.
-  * Merancang antarmuka awal (*UI Dashboard*) untuk menampilkan grafik suhu, kelembaban, dan status aktuator secara real-time.
-  * Menyiapkan integrasi subscriber dashboard dengan MQTT broker.
+* **Deskripsi Pengerjaan:** Menentukan parameter pemantauan dan format data telemetri dari topik-topik MQTT, merancang antarmuka awal (*UI Dashboard*) untuk menampilkan grafik suhu, kelembaban, dan status aktuator secara real-time, serta menyiapkan integrasi subscriber dashboard dengan MQTT broker.
 * **Dokumentasi:** *(Tangkapan layar rancangan UI Dashboard)*
 
 ---
 
 ### 1.3 Dokumentasi Kondisi Terakhir Sistem
-Hingga tanggal 4 Oktober 2026, kondisi terakhir sistem adalah sebagai berikut:
-1. **Kondisi Perangkat Keras (Hardware):** Modul mikrokontroler fisik (ESP32) aktif beroperasi, terhubung dengan catu daya, dan berhasil mengeksekusi instruksi pembacaan serta pemancar data telemetri secara stabil.
-2. **Kondisi Jaringan (Cyber/IoT):** Komunikasi data dua arah antara mikrokontroler dan Cloud MQTT Broker (`broker.emqx.io:1883`) berjalan secara real-time, lengkap dengan fitur *Fail-Safe Auto-Reconnect*.
-3. **Verifikasi Operasional Langsung:** Seluruh sistem komunikasi dan firmware diverifikasi dan dioperasikan secara langsung oleh penanggung jawab subsistem Network & IoT (Aditya Rahman) di depan perangkat keras dan layar pemantau live.
+Hingga tanggal 4 Oktober 2026, kondisi fisik dan siber dari sistem Smart Greenhouse telah mencapai status operasional stabil pada aspek komunikasi data. Untuk memastikan pengembangan subsistem *Network & IoT* tetap berjalan mandiri dan paralel sementara modul utama dirakit ke maket oleh anggota tim lainnya, sistem diuji coba secara langsung menggunakan modul mikrokontroler ESP32-C3 SuperMini. Pengujian ini memverifikasi bahwa firmware mampu berjalan stabil, terhubung ke Cloud MQTT Broker, dan memancarkan data telemetri secara berkelanjutan. Kondisi operasional terkini diverifikasi langsung oleh penanggung jawab subsistem Network & IoT (Aditya Rahman).
 
-*(Foto dokumentasi: Aditya di depan laptop yang menampilkan Serial Monitor + MQTTX aktif, dengan modul ESP32 di atas meja)*
+*(Foto dokumentasi: Aditya di depan laptop yang menampilkan Serial Monitor + MQTTX aktif, dengan modul ESP32-C3 di atas meja per 4 Oktober 2026)*
 
 ---
 
@@ -82,30 +66,13 @@ Secara umum proyek berjalan **sesuai jadwal (*on-track*)** untuk aspek siber, ja
 * **Aktual:** Implementasi pembacaan sensor DHT22 dan Soil Moisture kapasitif telah selesai. Pengujian kalibrasi ADC rentang basah/kering berhasil diimplementasikan, serta algoritma otomatisasi *Dual Closed-Loop* (kontrol suhu kipas dan kelembaban pompa air) telah terintegrasi di firmware ESP32.
 
 #### 3. Aditya Rahman (Network & IoT)
-* **Target (Sesuai Rencana Jadwal Minggu 4 – 7):**
-  * *Desain Arsitektur Jaringan (Minggu 4):* Merancang arsitektur komunikasi data IoT berbasis protokol MQTT model *Publish/Subscribe*, menentukan konfigurasi *Quality of Service* (QoS 0 dan QoS 1), serta menyusun standarisasi hierarki topik yang memisahkan antara data telemetri sensor, kendali aktuator, dan parameter keamanan sistem.
-  * *Setup & Pengujian Broker (Minggu 5):* Menyiapkan *MQTT Broker*, mengintegrasikan *library* komunikasi pada *firmware* mikrokontroler, dan memverifikasi pengiriman data awal dari perangkat keras fisik ESP32 menuju *broker*.
-  * *Komunikasi Dua Arah & Keandalan Jaringan (Minggu 6):* Mengimplementasikan mekanisme penerimaan instruksi kendali (*Subscribe*) pada mikrokontroler serta membangun algoritma *Network Fail-Safe* agar sistem tetap andal dan mampu memulihkan koneksi secara otonom saat terjadi gangguan jaringan.
-  * *Dokumentasi & Manajemen Repositori (Minggu 7):* Mendokumentasikan seluruh konfigurasi jaringan, parameter koneksi, dan mengelola repositori GitHub proyek sebagai pusat integrasi kode tim.
+* **Target:**  
+  Target kerja subsistem *Network & IoT* untuk rentang periode Minggu ke-4 hingga Minggu ke-7 berfokus pada pembangunan infrastruktur komunikasi data siber yang andal dan aman. Pada tahap awal, target mencakup perancangan arsitektur komunikasi berbasis protokol MQTT dengan model *Publish/Subscribe*, penentuan konfigurasi *Quality of Service* (QoS 0 dan QoS 1), serta penyusunan standarisasi hierarki topik yang memisahkan antara aliran data telemetri sensor, instruksi kendali aktuator, dan status keamanan sistem. Selanjutnya, target diarahkan pada penyiapan *MQTT Broker*, integrasi pustaka *PubSubClient* ke dalam *firmware* mikrokontroler, pengujian transmisi data dari perangkat keras fisik ESP32 ke server secara berkala, implementasi komunikasi dua arah untuk penerimaan perintah kendali (*Subscribe*), pembangunan algoritma *Network Fail-Safe* guna memastikan pemulihan koneksi secara otonom saat terjadi gangguan jaringan, serta pemeliharaan dokumentasi teknis terpadu pada repositori GitHub tim.
 
-* **Aktual / Realisasi Capaian:**
-  Seluruh target subsistem *Network & IoT* telah terealisasi **100%** dengan rincian teknis sebagai berikut:
-  1. *Penerapan Arsitektur Cloud Broker & Standarisasi Topik:*
-     * Mengonfigurasi dan memanfaatkan *Cloud Public Broker* (`broker.emqx.io:1883`) untuk memfasilitasi komunikasi nirkabel jarak jauh antar-anggota tim tanpa hambatan jaringan lokal (*NAT/Firewall*).
-     * Merumuskan dan menerapkan struktur topik hierarkis berbasis *prefix* `sg/` (Smart Greenhouse):
-       * **Telemetri Sensor:** `sg/sensor/suhu`, `sg/sensor/kelembaban_udara`, dan `sg/sensor/kelembaban_tanah` (menggunakan QoS 0 guna meminimalkan latensi dan beban bandwidth).
-       * **Kontrol Aktuator:** `sg/aktuator/kipas` dan `sg/aktuator/pompa` (menggunakan QoS 1 untuk menjamin instruksi kendali tersampaikan).
-       * **Keamanan & Sistem:** `sg/sistem/koneksi`, `sg/sistem/mode`, dan `sg/sistem/error` (dilengkapi protokol *Last Will and Testament* / LWT untuk deteksi dini status perangkat offline).
-  2. *Implementasi dan Pengujian Hardware Fisik End-to-End:*
-     * Memprogram dan menguji komunikasi data menggunakan mikrokontroler fisik **ESP32 Dev Module** serta melakukan validasi paralel pada **ESP32-C3 SuperMini**.
-     * Terbukti berhasil mempublikasikan data telemetri secara berkala setiap 5 detik dengan sinkronisasi *real-time* yang terverifikasi antara Serial Monitor Arduino IDE dan aplikasi pemantau *MQTTX Client*.
-  3. *Validasi Komunikasi Dua Arah (Bidirectional Control):*
-     * Mikrokontroler berhasil diuji tidak hanya memancarkan data (*Publish*), melainkan juga mampu berlangganan (*Subscribe*) ke topik aktuator. Ketika perintah kendali dikirimkan dari luar, mikrokontroler terbukti merespons secara instan (terverifikasi melalui penerimaan log perintah `ON/OFF` pada terminal).
-  4. *Keberhasilan Implementasi Network Fail-Safe (Algoritma Auto-Reconnect):*
-     * Berhasil mengatasi kendala pemutusan koneksi (*error rc=-2*) dengan merancang algoritma penanganan gangguan 2 tahap (*two-stage recovery mechanism*).
-     * Pada saat sinyal WiFi/Hotspot sengaja diputus lalu dinyalakan kembali, mikrokontroler secara otomatis mendeteksi ketiadaan sinyal, menginisiasi penyambungan ulang ke WiFi (`WiFi.reconnect()`), dan menyambung kembali ke MQTT Broker secara mandiri tanpa memerlukan restart atau campur tangan manual.
-  5. *Inisiasi dan Pemeliharaan Repositori GitHub:*
-     * Membangun dan memelihara repositori GitHub tim (`Proyek-Sistem-Siber-Fisis`) yang memuat seluruh *source code firmware*, dokumentasi skematik rangkaian, tabel pemetaan pin GPIO, dan dokumen laporan perkembangan proyek.
+* **Aktual:**  
+  Seluruh target yang direncanakan pada subsistem *Network & IoT* telah berhasil direalisasikan secara penuh (100%) dengan hasil yang teruji secara fungsional. Pada aspek arsitektur, sistem berhasil mengonfigurasi dan memanfaatkan *Cloud Public Broker* (`broker.emqx.io:1883`) yang memungkinkan pertukaran data nirkabel jarak jauh antar-anggota tim tanpa terhalang batasan jaringan lokal (*NAT/Firewall*). Struktur topik hierarkis berbasis *prefix* `sg/` telah distandarisasi secara komprehensif, mencakup pembagian topik telemetri sensor (`sg/sensor/suhu`, `sg/sensor/kelembaban_udara`, `sg/sensor/kelembaban_tanah`) yang menggunakan QoS 0 demi efisiensi *bandwidth*, topik kendali aktuator (`sg/aktuator/kipas`, `sg/aktuator/pompa`) dengan QoS 1 untuk menjamin kepastian pengiriman perintah, serta topik keamanan dan status sistem (`sg/sistem/koneksi`, `sg/sistem/mode`, `sg/sistem/error`) yang dilengkapi mekanisme *Last Will and Testament* (LWT) guna mendeteksi kondisi perangkat terputus (*offline*) secara otomatis.
+
+  Pada aspek implementasi dan verifikasi perangkat keras, komunikasi data telah berhasil diuji secara *end-to-end* menggunakan mikrokontroler fisik ESP32 Dev Module serta divalidasi secara paralel menggunakan modul alternatif ESP32-C3 SuperMini. Mikrokontroler terbukti sukses mempublikasikan data telemetri setiap 5 detik dengan tingkat sinkronisasi *real-time* yang presisi antara Serial Monitor Arduino IDE dan aplikasi pemantau MQTTX Client. Lebih lanjut, sistem telah berhasil memvalidasi kemampuan kendali dua arah (*bidirectional control*), di mana ESP32 mampu berlangganan ke topik aktuator dan merespons sinyal perintah kendali dari luar secara instan. Pada aspek ketahanan jaringan (*Cyber-Physical Security*), kendala kegagalan penyambungan ulang (*error rc=-2*) berhasil diselesaikan dengan menerapkan algoritma pemulihan dua tahap (*two-stage recovery mechanism*), sehingga mikrokontroler terbukti mampu mendeteksi ketiadaan sinyal WiFi, menginisiasi sambungan ulang WiFi secara otonom, dan kembali terhubung ke broker MQTT tanpa *freeze* atau memerlukan *restart* manual. Seluruh kode program, skematik rangkaian, dan dokumentasi ini juga telah terintegrasi secara rapi pada repositori GitHub kelompok.
 
 #### 4. Fathoni (Monitoring & Evaluation)
 * **Target:** Menentukan parameter monitoring, rancangan awal dashboard visual, dan format data MQTT.
