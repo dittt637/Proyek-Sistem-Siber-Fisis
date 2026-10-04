@@ -34,19 +34,20 @@ Alur kerja sistem membentuk *feedback loop*:
 
 ---
 
-## 🔌 Skematik & Pemetaan Pin (Schematic Revisi)
+## 🔌 Skematik & Pemetaan Pin (Firmware Final)
 
-Sistem menggunakan catu daya utama Adaptor 12V dengan **Rocker Switch (On/Off)** pada jalur utama VCC 12V. Tegangan diturunkan menggunakan modul **LM2596 Buck Converter** menjadi **5V** (untuk daya ESP32 Pin VIN & Pompa Air 5V). Aktuator dikendalikan menggunakan **Driver Transistor NPN (BC547)**.
+Sistem menggunakan catu daya utama Adaptor 12V dengan **Rocker Switch** dan **Emergency Stop Switch** terintegrasi. Tegangan diturunkan menggunakan modul **LM2596 Buck Converter** menjadi **5V** (untuk daya ESP32 Pin VIN, Pompa Air 5V, dan modul penggerak). Aktuator dikendalikan melalui pin digital output dan sensor divalidasi dengan filter data.
 
-### Pemetaan Pin GPIO ESP32 (Schematic Revisi):
-| Komponen Perangkat | Jenis / Fungsi | Pin Perangkat | Pin ESP32 |
+### Pemetaan Pin GPIO ESP32 (Firmware Final):
+| Komponen Perangkat | Jenis / Fungsi | Pin ESP32 | Keterangan Mode |
 | :--- | :--- | :--- | :--- |
-| **DHT22** | Sensor Suhu & Kelembaban | Data | **GPIO 34** |
-| **Capacitive Soil Moisture v1.2** | Sensor Kelembaban Tanah | Analog Out (AOUT) | **GPIO 4** |
-| **Driver Transistor 1** | Aktuator Pompa Air 5V | Base (B) via Resistor | **GPIO 27** |
-| **Driver Transistor 2** | Aktuator Kipas DC 12V | Base (B) via Resistor | **GPIO 26** |
+| **DHT22** | Sensor Suhu & Kelembaban Udara | **GPIO 4** | Digital Input |
+| **Capacitive Soil Moisture v1.2** | Sensor Kelembaban Tanah | **GPIO 34** | Analog Input (ADC1) |
+| **Kipas DC 12V** | Aktuator Pendingin | **GPIO 27** | Digital Output |
+| **Pompa Air Mini 5V** | Aktuator Irigasi | **GPIO 26** | Digital Output |
+| **Emergency Stop Switch** | Saklar Darurat Keamanan Fisik | **GPIO 14** | Digital Input (INPUT_PULLUP Interrupt) |
 
-*Dokumentasi lengkap skematik revisi dan diagram alur daya dapat dilihat di [hardware/README.md](hardware/README.md).*
+*Dokumentasi lengkap skematik dan diagram alur daya dapat dilihat di [hardware/README.md](hardware/README.md).*
 
 ---
 

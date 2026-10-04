@@ -2,8 +2,8 @@
 #include <PubSubClient.h>
 
 // --- KONFIGURASI WIFI ---
-const char* ssid = "NAMA_WIFI_ANDA";       // Ganti dengan nama WiFi Anda
-const char* password = "PASSWORD_WIFI";    // Ganti dengan password WiFi Anda
+const char* ssid = "MONITORING-ESP32";       // Ganti dengan nama WiFi Anda
+const char* password = "esp32monitor";    // Ganti dengan password WiFi Anda
 
 // --- KONFIGURASI MQTT BROKER ---
 const char* mqtt_server = "broker.emqx.io";
