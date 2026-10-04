@@ -34,7 +34,7 @@ Dokumentasi proses pengerjaan dibagi berdasarkan pembagian tugas tiap anggota:
 * **Dokumentasi:** *(Foto proses pemrograman & pengujian sensor)*
 
 #### 3. Network Communication & IoT (Aditya Rahman)
-* **Deskripsi Pengerjaan:** Melakukan perancangan struktur topik dan simulasi awal (*Mock Testing*) menggunakan aplikasi MQTTX Client, dilanjutkan dengan pengunggahan firmware komunikasi ke mikrokontroler fisik ESP32 via USB-TTL untuk pengiriman telemetri periodik ke Cloud Broker `broker.emqx.io`. Tahap akhir mencakup pengujian respon kendali dua arah (*Subscribe*) serta verifikasi ketahanan jaringan melalui mekanisme pemulihan koneksi otomatis (*Auto-Reconnect*) saat sinyal WiFi terputus.
+* **Deskripsi Pengerjaan:** Menginisiasi dan mengonfigurasi repositori GitHub kelompok (`Proyek-Sistem-Siber-Fisis`) sebagai infrastruktur *version control* terpusat, merancang struktur topik dan simulasi awal (*Mock Testing*) di MQTTX Client, mengunggah firmware komunikasi ke mikrokontroler fisik ESP32 via USB-TTL untuk pengujian telemetri ke Cloud Broker `broker.emqx.io`, serta memvalidasi respon kendali dua arah (*Subscribe*) dan ketahanan jaringan otomatis (*Auto-Reconnect*).
 * **Dokumentasi:** *(Tangkapan layar Serial Monitor Arduino IDE bersisian dengan MQTTX Client dari presentasi PPT)*
 
 #### 4. Monitoring Interface & Evaluation (Fathoni Ibra A A)
@@ -67,10 +67,10 @@ Secara umum proyek berjalan **sesuai jadwal (*on-track*)** untuk aspek siber, ja
 
 #### 3. Aditya Rahman (Network & IoT)
 * **Target:**  
-  Mendesain arsitektur komunikasi data berbasis MQTT, menentukan struktur hierarki topik, menyiapkan broker, menguji komunikasi dua arah (*Publish/Subscribe*), serta mengimplementasikan mekanisme *Network Fail-Safe* dari Minggu 4 hingga Minggu 7.
+  Mendesain arsitektur komunikasi data berbasis MQTT, menentukan struktur hierarki topik, menyiapkan broker, menguji komunikasi dua arah (*Publish/Subscribe*), mengimplementasikan mekanisme *Network Fail-Safe*, serta menginisiasi repositori GitHub tim sebagai pusat sistem kontrol versi (*version control*) dan integrasi kode bersama.
 
 * **Aktual:**  
-  Berhasil membangun komunikasi data menggunakan *Cloud Broker* (`broker.emqx.io:1883`) dengan hierarki topik terstandarisasi (`sg/sensor/...`, `sg/aktuator/...`, `sg/sistem/...`). Pengujian transmisi data telemetri berkala dan komunikasi dua arah telah teruji 100% secara langsung menggunakan perangkat keras fisik ESP32. Selain itu, fitur *Network Fail-Safe* berupa *Auto-Reconnect* otomatis saat koneksi WiFi terputus berhasil diimplementasikan tanpa membuat sistem *freeze*, dan seluruh kode serta dokumentasi telah diintegrasikan ke repositori GitHub tim.
+  Berhasil membangun komunikasi data menggunakan *Cloud Broker* (`broker.emqx.io:1883`) dengan hierarki topik terstandarisasi (`sg/sensor/...`, `sg/aktuator/...`, `sg/sistem/...`). Pengujian transmisi data telemetri berkala dan komunikasi dua arah telah teruji 100% secara langsung menggunakan perangkat keras fisik ESP32. Selain itu, fitur *Network Fail-Safe* berupa *Auto-Reconnect* otomatis saat koneksi WiFi terputus berhasil diimplementasikan tanpa membuat sistem *freeze*. Di sisi manajemen sistem, penanggung jawab subsistem ini juga telah menginisiasi dan mengelola repositori GitHub tim (`Proyek-Sistem-Siber-Fisis`) untuk standarisasi struktur folder proyek, manajemen kolaborasi kode antar-anggota, serta pusat dokumentasi kemajuan tim.
 
 #### 4. Fathoni (Monitoring & Evaluation)
 * **Target:** Menentukan parameter monitoring, rancangan awal dashboard visual, dan format data MQTT.
