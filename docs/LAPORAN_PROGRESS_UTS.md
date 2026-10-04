@@ -72,10 +72,44 @@ Hingga tanggal 4 Oktober 2026, kondisi terakhir sistem adalah sebagai berikut:
 Secara umum proyek berjalan **sesuai jadwal (*on-track*)** untuk aspek siber, jaringan, dan kontrol embedded. Penyesuaian dilakukan pada modul regulator daya (menggunakan LM2596 Buck Converter) dan penggerak transistor untuk meningkatkan efisiensi dan keamanan termal sistem.
 
 ### 2.2 Realisasi Pembagian Kerja Tim (Target vs Aktual)
-1. **Bagus (Hardware & Mechanical):** Selesai membuat wiring diagram dan perakitan komponen utama. Pembuatan fisik maket greenhouse dijadwalkan pasca-UTS untuk menyesuaikan dimensi akhir rangkaian.
-2. **Harits (Embedded & Control):** Selesai mengimplementasikan pembacaan sensor DHT22 & Soil Moisture, kalibrasi nilai ADC, dan logika kontrol *Dual Closed-Loop*.
-3. **Aditya (Network & IoT):** Selesai membangun arsitektur MQTT, struktur topik, verifikasi hardware fisik, komunikasi dua arah, dan pengujian *Network Fail-Safe*.
-4. **Fathoni (Monitoring & Evaluation):** Selesai merancang format data dan konsep UI dashboard monitoring IoT.
+
+#### 1. Bagus (Hardware & Mechanical)
+* **Target:** Menyelesaikan desain greenhouse fisik, membuat wiring diagram, serta perakitan lengkap (ESP32, modul daya, kipas, pompa, saklar safety).
+* **Aktual:** Pembuatan wiring diagram dan perakitan komponen utama telah selesai dilakukan. Pembuatan fisik maket akrilik greenhouse dijadwalkan pasca-UTS guna memastikan tata letak dan dimensi akhir komponen elektronik presisi.
+
+#### 2. Harits (Embedded & Control)
+* **Target:** Menentukan kebutuhan sensor, implementasi pembacaan DHT22 dan Soil Moisture, kalibrasi sensor, serta pemrograman algoritma kontrol.
+* **Aktual:** Implementasi pembacaan sensor DHT22 dan Soil Moisture kapasitif telah selesai. Pengujian kalibrasi ADC rentang basah/kering berhasil diimplementasikan, serta algoritma otomatisasi *Dual Closed-Loop* (kontrol suhu kipas dan kelembaban pompa air) telah terintegrasi di firmware ESP32.
+
+#### 3. Aditya Rahman (Network & IoT)
+* **Target (Sesuai Rencana Jadwal Minggu 4 – 7):**
+  * *Desain Arsitektur Jaringan (Minggu 4):* Merancang arsitektur komunikasi data IoT berbasis protokol MQTT model *Publish/Subscribe*, menentukan konfigurasi *Quality of Service* (QoS 0 dan QoS 1), serta menyusun standarisasi hierarki topik yang memisahkan antara data telemetri sensor, kendali aktuator, dan parameter keamanan sistem.
+  * *Setup & Pengujian Broker (Minggu 5):* Menyiapkan *MQTT Broker*, mengintegrasikan *library* komunikasi pada *firmware* mikrokontroler, dan memverifikasi pengiriman data awal dari perangkat keras fisik ESP32 menuju *broker*.
+  * *Komunikasi Dua Arah & Keandalan Jaringan (Minggu 6):* Mengimplementasikan mekanisme penerimaan instruksi kendali (*Subscribe*) pada mikrokontroler serta membangun algoritma *Network Fail-Safe* agar sistem tetap andal dan mampu memulihkan koneksi secara otonom saat terjadi gangguan jaringan.
+  * *Dokumentasi & Manajemen Repositori (Minggu 7):* Mendokumentasikan seluruh konfigurasi jaringan, parameter koneksi, dan mengelola repositori GitHub proyek sebagai pusat integrasi kode tim.
+
+* **Aktual / Realisasi Capaian:**
+  Seluruh target subsistem *Network & IoT* telah terealisasi **100%** dengan rincian teknis sebagai berikut:
+  1. *Penerapan Arsitektur Cloud Broker & Standarisasi Topik:*
+     * Mengonfigurasi dan memanfaatkan *Cloud Public Broker* (`broker.emqx.io:1883`) untuk memfasilitasi komunikasi nirkabel jarak jauh antar-anggota tim tanpa hambatan jaringan lokal (*NAT/Firewall*).
+     * Merumuskan dan menerapkan struktur topik hierarkis berbasis *prefix* `sg/` (Smart Greenhouse):
+       * **Telemetri Sensor:** `sg/sensor/suhu`, `sg/sensor/kelembaban_udara`, dan `sg/sensor/kelembaban_tanah` (menggunakan QoS 0 guna meminimalkan latensi dan beban bandwidth).
+       * **Kontrol Aktuator:** `sg/aktuator/kipas` dan `sg/aktuator/pompa` (menggunakan QoS 1 untuk menjamin instruksi kendali tersampaikan).
+       * **Keamanan & Sistem:** `sg/sistem/koneksi`, `sg/sistem/mode`, dan `sg/sistem/error` (dilengkapi protokol *Last Will and Testament* / LWT untuk deteksi dini status perangkat offline).
+  2. *Implementasi dan Pengujian Hardware Fisik End-to-End:*
+     * Memprogram dan menguji komunikasi data menggunakan mikrokontroler fisik **ESP32 Dev Module** serta melakukan validasi paralel pada **ESP32-C3 SuperMini**.
+     * Terbukti berhasil mempublikasikan data telemetri secara berkala setiap 5 detik dengan sinkronisasi *real-time* yang terverifikasi antara Serial Monitor Arduino IDE dan aplikasi pemantau *MQTTX Client*.
+  3. *Validasi Komunikasi Dua Arah (Bidirectional Control):*
+     * Mikrokontroler berhasil diuji tidak hanya memancarkan data (*Publish*), melainkan juga mampu berlangganan (*Subscribe*) ke topik aktuator. Ketika perintah kendali dikirimkan dari luar, mikrokontroler terbukti merespons secara instan (terverifikasi melalui penerimaan log perintah `ON/OFF` pada terminal).
+  4. *Keberhasilan Implementasi Network Fail-Safe (Algoritma Auto-Reconnect):*
+     * Berhasil mengatasi kendala pemutusan koneksi (*error rc=-2*) dengan merancang algoritma penanganan gangguan 2 tahap (*two-stage recovery mechanism*).
+     * Pada saat sinyal WiFi/Hotspot sengaja diputus lalu dinyalakan kembali, mikrokontroler secara otomatis mendeteksi ketiadaan sinyal, menginisiasi penyambungan ulang ke WiFi (`WiFi.reconnect()`), dan menyambung kembali ke MQTT Broker secara mandiri tanpa memerlukan restart atau campur tangan manual.
+  5. *Inisiasi dan Pemeliharaan Repositori GitHub:*
+     * Membangun dan memelihara repositori GitHub tim (`Proyek-Sistem-Siber-Fisis`) yang memuat seluruh *source code firmware*, dokumentasi skematik rangkaian, tabel pemetaan pin GPIO, dan dokumen laporan perkembangan proyek.
+
+#### 4. Fathoni (Monitoring & Evaluation)
+* **Target:** Menentukan parameter monitoring, rancangan awal dashboard visual, dan format data MQTT.
+* **Aktual:** Penentuan parameter monitoring dan topik penerimaan data selesai. Rancangan awal antarmuka UI dashboard pemantau telah disiapkan dan siap diintegrasikan dengan broker MQTT.
 
 ### 2.3 Kesesuaian Alat dan Bahan
 | Komponen Direncanakan | Komponen Aktual | Status | Keterangan |
