@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smart Greenhouse Monitor - Fathoni Dashboard (Live EMQX)</title>
+<style>
+:root{--bg:#e8eee9;--panel:#fff;--ink:#14231c;--mute:#5b6b63;--line:#cfdad2;--ok:#1b7f4b;--warn:#b7791f;--bad:#c2312d;--orange:#c4570c;--on:#1f5fbf}
+@media(prefers-color-scheme:dark){:root{--bg:#101a15;--panel:#18261f;--ink:#e6efe9;--mute:#9bb0a4;--line:#2c4136;--ok:#4cc789;--warn:#e2b04a;--bad:#ff6b66;--orange:#ff9a52;--on:#6fa8ff}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 ui-sans-serif,system-ui,"Segoe UI",sans-serif}
+main{max-width:1000px;margin:0 auto;padding:16px}
+header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+h1{font:600 22px/1.2 Georgia,"Times New Roman",serif;margin:0}
+h2{font-size:14px;margin:0 0 8px;color:var(--mute);font-weight:600}
+.badge{padding:2px 10px;border-radius:99px;border:1px solid var(--line);font-size:13px}
+#banner{padding:14px 16px;border-radius:8px;font-weight:600;margin-bottom:14px;color:#fff}
+.green{background:var(--ok)}.yellow{background:var(--warn)}.orange{background:var(--orange)}.red{background:var(--bad)}
+.pulse{animation:p 1s infinite alternate}@keyframes p{to{opacity:.55}}@media(prefers-reduced-motion:reduce){.pulse{animation:none}}
+.grid{display:grid;gap:12px;margin-bottom:12px}.g3{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}.g2{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px}
+.val{font-size:40px;font-weight:700;line-height:1.1}.val small{font-size:16px;font-weight:400;color:var(--mute)}
+.stale .val{opacity:.4}.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}.on{color:var(--on)}.off{color:var(--mute)}
+.row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--line)}.row:last-child{border:0}
+svg{width:100%;height:140px;display:block}.ln{fill:none;stroke:var(--on);stroke-width:2;vector-effect:non-scaling-stroke}
+.th{stroke:var(--bad);stroke-dasharray:4 4;stroke-width:1;vector-effect:non-scaling-stroke}.th2{stroke:var(--warn)}
+.cap{font-size:12px;color:var(--mute)}table{width:100%;border-collapse:collapse}td{padding:5px 6px;border-bottom:1px solid var(--line);font-size:13px}
+</style>
+<!-- Menggunakan CDN resmi mqtt.js agar bisa langsung dibuka di browser tanpa Node.js -->
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+</head>
+<body>
+<main>
+<header><h1>Smart Greenhouse Monitor</h1><span class="badge" id="conn">Menghubungkan…</span></header>
+<div id="banner" class="yellow">Memuat…</div>
+<div class="grid g3">
+  <div class="box" id="c-temp"></div><div class="box" id="c-hum"></div><div class="box" id="c-soil"></div>
+</div>
+<div class="grid g2">
+  <div class="box"><h2>Aktuator</h2><div id="act"></div></div>
+  <div class="box"><h2>Status sistem</h2><div id="sys"></div></div>
+</div>
+<div class="grid g2">
+  <div class="box"><h2>Suhu udara (°C)</h2><div id="ch-temp"></div><div class="cap">Garis merah: 35 °C kipas ON · garis kuning: 28 °C kipas OFF</div></div>
+  <div class="box"><h2>Kelembapan tanah (%)</h2><div id="ch-soil"></div><div class="cap">Garis merah: 30 % pompa ON · garis kuning: 60 % pompa OFF</div></div>
+</div>
+<div class="grid g2">
+  <div class="box"><h2>Riwayat alert</h2><table id="alerts"></table></div>
+  <div class="box"><h2>Metrik MQTT</h2><div id="metrics"></div></div>
+</div>
+</main>
+<script>
+// Ambang sesuai SPEC Fathoni (dikunci di firmware).
+const CFG = { FAN_ON: 35, FAN_OFF: 28, PUMP_ON: 30, PUMP_OFF: 60, STALE_MS: 7000, MAX_PTS: 300 };
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+const st = { sensor: null, act: null, sys: null, broker: 'connecting', rx: 0, temp: [], soil: [], alerts: [], stats: { received: 0, lost: 0, lossPct: 0, latAvgMs: null, latMaxMs: null, restarts: 0, rejected: 0 } };
+const push = (a, v) => { a.push(v); if (a.length > CFG.MAX_PTS) a.shift(); };
+const hhmmss = ms => new Date(ms).toLocaleTimeString('id-ID');
+
+let lastSeq = null;
+
+function boot() {
+  connect();
+  setInterval(render, 1000);
+  render();
+}
+
+async function connect() {
+  // Langsung terhubung ke Broker EMQX Cloud via WSS WebSocket (Port 8084)
+  const url = 'wss://broker.emqx.io:8084/mqtt';
+  st.brokerUrl = 'broker.emqx.io';
+  
+  const c = mqtt.connect(url, { 
+    reconnectPeriod: 2000,
+    clientId: 'Browser_Aditya_' + Math.random().toString(16).substring(2, 8)
+  });
+
+  c.on('connect', () => { 
+    st.broker = 'connected'; 
+    c.subscribe('greenhouse/#', { qos: 1 }); 
+    render(); 
+  });
+  c.on('reconnect', () => { st.broker = 'reconnecting'; render(); });
+  c.on('close', () => { st.broker = 'disconnected'; render(); });
+  c.on('error', (e) => { console.warn('MQTT error', e); });
+
+  c.on('message', (t, b) => {
+    let p; 
+    try { p = JSON.parse(b.toString()); } catch { st.stats.rejected++; return console.warn('payload bukan JSON', t); }
+    if (!p || typeof p !== 'object') return;
+
+    if (t.endsWith('sensor/data')) {
+      if (!Number.isInteger(p.soil) || p.soil < 0 || p.soil > 100) return console.warn('soil di luar 0-100 ditolak');
+      p.rx = Date.now(); 
+      st.sensor = p; 
+      st.rx = p.rx; 
+      push(st.temp, p.temp); 
+      push(st.soil, p.soil);
+
+      // Hitung packet loss lokal di browser
+      if (lastSeq !== null) {
+        if (p.seq < lastSeq && p.seq <= 10) {
+          st.stats.restarts++;
+        } else if (p.seq > lastSeq) {
+          st.stats.lost += (p.seq - lastSeq - 1);
+        }
+      }
+      lastSeq = p.seq;
+      st.stats.received++;
+      const tot = st.stats.received + st.stats.lost;
+      st.stats.lossPct = tot ? +((st.stats.lost / tot) * 100).toFixed(2) : 0;
+
+      // Estimasi latensi
+      if (p.ts > 0) {
+        const lat = Date.now() - (p.ts * 1000);
+        if (lat >= 0 && lat < 60000) {
+          st.stats.latAvgMs = Math.round(lat);
+          st.stats.latMaxMs = Math.max(st.stats.latMaxMs || 0, Math.round(lat));
+        }
+      }
+
+    } else if (t.endsWith('actuator/status')) {
+      st.act = p;
+    } else if (t.endsWith('system/status')) {
+      st.sys = p;
+    } else if (t.endsWith('/alert')) {
+      st.alerts.unshift({ rx: Date.now(), ...p }); 
+      st.alerts.length = Math.min(st.alerts.length, 50);
+    }
+    render();
+  });
+}
+
+function card(id, title, v, unit, cls, label, hide, stale) {
+  $(id).className = 'box' + (stale ? ' stale' : '');
+  $(id).innerHTML = `<h2>${title}</h2><div class="val">${v == null || hide ? '–' : v}<small> ${unit}</small></div>` +
+    `<div class="${hide ? 'bad' : cls}">${hide ? '⚠ Sensor tidak valid' : label}</div>` +
+    (stale && st.rx ? `<div class="cap">⏱ Data terakhir: ${hhmmss(st.rx)}</div>` : '');
+}
+
+function chart(id, data, min, max, lines) {
+  const W = 600, H = 140, n = data.length, x = i => n < 2 ? 0 : i * W / (n - 1), y = v => H - (v - min) / (max - min) * H;
+  let d = '', pen = false;
+  data.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(v).toFixed(1); pen = true; });
+  $(id).innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">` +
+    lines.map(l => `<line x1="0" x2="${W}" y1="${y(l.v)}" y2="${y(l.v)}" class="th ${l.c || ''}"/>`).join('') + `<path d="${d}" class="ln"/></svg>`;
+}
+
+function render() {
+  const s = st.sensor, a = st.act, sys = st.sys, age = Date.now() - st.rx;
+  const down = st.broker !== 'connected', stale = down || !st.rx || age > CFG.STALE_MS;
+  const fault = !!(sys && sys.sensor_fault), estop = !!(a && (a.estop || a.mode === 'emergency'));
+
+  let b;
+  if (down) b = ['red', '⛔ Dashboard terputus dari broker. Data di layar tidak real-time.'];
+  else if (estop) b = ['red pulse', '⛔ EMERGENCY STOP AKTIF. Semua aktuator dimatikan.'];
+  else if (fault) b = ['orange', '⚠ Sensor fault. Aktuator diputus otomatis.'];
+  else if (sys && sys.state === 'offline') b = ['yellow', '📡 Koneksi ESP32 terputus. Perangkat beroperasi mandiri.'];
+  else if (stale) b = ['yellow', '⏱ Data tidak diperbarui.'];
+  else b = ['green', '✔ Sistem normal'];
+  $('banner').className = b[0]; $('banner').textContent = b[1];
+  $('conn').textContent = { connected: '● Broker terhubung', reconnecting: '○ Menyambung ulang…', disconnected: '○ Broker terputus', connecting: '○ Menghubungkan…' }[st.broker] + (st.brokerUrl ? ' (' + st.brokerUrl + ')' : '');
+
+  const t = s && s.temp, h = s && s.hum, so = s && s.soil, hide = fault || (s && s.temp == null);
+  card('c-temp', 'Suhu udara', t, '°C', t > CFG.FAN_ON ? 'bad' : t > CFG.FAN_OFF ? 'warn' : 'ok', t > CFG.FAN_ON ? 'Kritis, suhu terlalu tinggi' : t > CFG.FAN_OFF ? 'Waspada' : 'Normal', hide, stale);
+  card('c-hum', 'Kelembapan udara', h, '%', h < 40 || h > 80 ? 'warn' : 'ok', h < 40 || h > 80 ? 'Di luar rentang optimal' : 'Normal', hide, stale);
+  card('c-soil', 'Kelembapan tanah', so, '%', so < CFG.PUMP_ON ? 'bad' : so < CFG.PUMP_OFF ? 'warn' : 'ok', so < CFG.PUMP_ON ? 'Kritis, tanah kering' : so < CFG.PUMP_OFF ? 'Waspada' : 'Normal', false, stale);
+
+  const chip = (on) => estop ? '<b class="bad">OFF (darurat)</b>' : on ? '<b class="on">ON</b>' : '<b class="off">OFF</b>';
+  const tag = stale ? ' <span class="cap">(tidak real-time)</span>' : '';
+  $('act').innerHTML = a ? `<div class="row"><span>Kipas</span><span>${chip(a.fan)}${tag}</span></div><div class="row"><span>Pompa</span><span>${chip(a.pump)}${tag}</span></div><div class="row"><span>Mode</span><b>${esc(a.mode)}</b></div>` : '<span class="cap">Belum ada data</span>';
+  $('sys').innerHTML = `<div class="row"><span>Koneksi ESP32</span><b class="${sys && sys.state === 'online' ? 'ok' : 'warn'}">${sys ? esc(sys.state) : '–'}</b></div>` +
+    `<div class="row"><span>E-Stop</span><b class="${estop ? 'bad' : 'ok'}">${estop ? 'Aktif' : 'Tidak aktif'}</b></div>` +
+    `<div class="row"><span>Sensor</span><b class="${fault ? 'bad' : 'ok'}">${fault ? 'Fault' : 'Normal'}</b></div>` +
+    `<div class="row"><span>Pembaruan terakhir</span><span>${st.rx ? Math.round(age / 1000) + ' dtk lalu' : '–'}</span></div>`;
+
+  chart('ch-temp', st.temp, 20, 45, [{ v: CFG.FAN_ON }, { v: CFG.FAN_OFF, c: 'th2' }]);
+  chart('ch-soil', st.soil, 0, 100, [{ v: CFG.PUMP_ON }, { v: CFG.PUMP_OFF, c: 'th2' }]);
+
+  $('alerts').innerHTML = st.alerts.length ? st.alerts.slice(0, 50).map(x =>
+    `<tr><td class="${x.level === 'critical' ? 'bad' : 'warn'}">${x.level === 'critical' ? 'Kritis' : 'Waspada'}</td><td>${hhmmss(x.rx)}</td><td>${esc(x.code)}</td><td>${esc(x.message)}</td></tr>`).join('')
+    : '<tr><td class="cap">Belum ada alert</td></tr>';
+
+  const m = st.stats, tsBad = s && (s.ts === 0 || Math.abs(s.ts - s.rx / 1000) > 60);
+  $('metrics').innerHTML = m ? `<div class="row"><span>Seq terakhir</span><b>${s ? s.seq : '–'}</b></div>` +
+    `<div class="row"><span>Pesan diterima</span><b>${m.received}</b></div><div class="row"><span>Packet loss</span><b>${m.lossPct}% (${m.lost} hilang)</b></div>` +
+    `<div class="row"><span>Latensi rata-rata / maks</span><b>${m.latAvgMs ?? '–'} / ${m.latMaxMs ?? '–'} ms</b></div>` +
+    `<div class="row"><span>Restart perangkat</span><b>${m.restarts}</b></div><div class="row"><span>Pesan ditolak</span><b>${m.rejected}</b></div>` +
+    (tsBad ? '<div class="warn">⚠ ts tidak sinkron, latensi tidak dihitung</div>' : '') +
+    '<div class="cap">Latensi akurat sekitar ±1 detik (ts beresolusi detik).</div>' : '<span class="cap">Menunggu data…</span>';
+}
+boot();
+</script>
+</body>
+</html>
