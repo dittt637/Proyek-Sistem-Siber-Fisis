@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Greenhouse Dashboard - CPS UGM</title>
+  <!-- Tailwind CSS CDN untuk tampilan modern -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- MQTT.js library untuk koneksi WebSocket ke MQTT Broker -->
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+</head>
+<body class="bg-slate-900 text-white min-h-screen p-6 font-sans">
+  <div class="max-w-5xl mx-auto">
+    <!-- Header -->
+    <header class="flex justify-between items-center border-b border-slate-700 pb-4 mb-6">
+      <div>
+        <h1 class="text-2xl font-bold text-emerald-400">🌱 Smart Greenhouse Monitoring</h1>
+        <p class="text-sm text-slate-400">Cyber Physical System & MQTT Architecture</p>
+      </div>
+      <div id="conn-badge" class="px-3 py-1 rounded-full text-xs font-semibold bg-red-500/20 text-red-400 border border-red-500/30">
+        Broker: Terputus
+      </div>
+    </header>
+
+    <!-- Kartu Status Sensor -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <!-- Suhu Udara -->
+      <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
+        <div class="flex items-center justify-between text-slate-400 mb-2">
+          <span>Suhu Udara (DHT22)</span>
+          <span class="text-xl">🌡️</span>
+        </div>
+        <div class="flex items-baseline gap-2">
+          <span id="val-suhu" class="text-4xl font-extrabold text-white">--</span>
+          <span class="text-slate-400 font-medium">°C</span>
+        </div>
+        <p class="text-xs text-slate-400 mt-3">Batas Kipas: > 35.0 °C (ON), ≤ 28.0 °C (OFF)</p>
+      </div>
+
+      <!-- Kelembaban Udara -->
+      <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
+        <div class="flex items-center justify-between text-slate-400 mb-2">
+          <span>Kelembaban Udara</span>
+          <span class="text-xl">💧</span>
+        </div>
+        <div class="flex items-baseline gap-2">
+          <span id="val-hum" class="text-4xl font-extrabold text-white">--</span>
+          <span class="text-slate-400 font-medium">%</span>
+        </div>
+        <p class="text-xs text-slate-400 mt-3">Sensor DHT22 Ambient</p>
+      </div>
+
+      <!-- Kelembaban Tanah -->
+      <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
+        <div class="flex items-center justify-between text-slate-400 mb-2">
+          <span>Kelembaban Tanah</span>
+          <span class="text-xl">🪴</span>
+        </div>
+        <div class="flex items-baseline gap-2">
+          <span id="val-tanah" class="text-4xl font-extrabold text-emerald-400">--</span>
+          <span class="text-slate-400 font-medium">%</span>
+        </div>
+        <p class="text-xs text-slate-400 mt-3">Batas Pompa: &lt; 30% (ON), ≥ 60% (OFF)</p>
+      </div>
+    </div>
+
+    <!-- Status Aktuator & Kendali Jarak Jauh -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+      <!-- Kipas -->
+      <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg flex flex-col justify-between">
+        <div class="flex justify-between items-start mb-4">
+          <div>
+            <h3 class="font-semibold text-lg text-white">Kipas Pendingin (12V)</h3>
+            <p class="text-xs text-slate-400">GPIO 27 - Pendingin Ruangan</p>
+          </div>
+          <span id="badge-kipas" class="px-3 py-1 rounded-full text-xs font-bold bg-slate-700 text-slate-400">
+            OFF
+          </span>
+        </div>
+        <div class="flex gap-3">
+          <button onclick="publishActuator('kipas', 'ON')" class="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-semibold text-sm transition">Manual ON</button>
+          <button onclick="publishActuator('kipas', 'OFF')" class="flex-1 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 font-semibold text-sm transition">Manual OFF</button>
+        </div>
+      </div>
+
+      <!-- Pompa Air -->
+      <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg flex flex-col justify-between">
+        <div class="flex justify-between items-start mb-4">
+          <div>
+            <h3 class="font-semibold text-lg text-white">Pompa Air Irigasi (5V)</h3>
+            <p class="text-xs text-slate-400">GPIO 26 - Irigasi Tanah</p>
+          </div>
+          <span id="badge-pompa" class="px-3 py-1 rounded-full text-xs font-bold bg-slate-700 text-slate-400">
+            OFF
+          </span>
+        </div>
+        <div class="flex gap-3">
+          <button onclick="publishActuator('pompa', 'ON')" class="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-semibold text-sm transition">Manual ON</button>
+          <button onclick="publishActuator('pompa', 'OFF')" class="flex-1 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 font-semibold text-sm transition">Manual OFF</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Log Pesan Masuk Real-Time -->
+    <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
+      <h3 class="font-semibold text-sm text-slate-300 mb-3">📡 Terminal Data Masuk (MQTT Live Log)</h3>
+      <div id="mqtt-log" class="bg-slate-950 p-4 rounded-xl font-mono text-xs text-emerald-400 h-36 overflow-y-auto space-y-1">
+        <p class="text-slate-500">// Menghubungkan ke broker.emqx.io...</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Koneksi ke EMQX Cloud Broker via Secure WebSocket (Port 8084)
+    const brokerUrl = 'wss://broker.emqx.io:8084/mqtt';
+    const clientId = 'Dashboard_Fathoni_' + Math.random().toString(16).substring(2, 8);
+
+    const client = mqtt.connect(brokerUrl, {
+      clientId: clientId,
+      clean: true,
+      connectTimeout: 4000
+    });
+
+    const connBadge = document.getElementById('conn-badge');
+    const logBox = document.getElementById('mqtt-log');
+
+    function appendLog(topic, message) {
+      const p = document.createElement('p');
+      const time = new Date().toLocaleTimeString();
+      p.textContent = `[${time}] ${topic} ➔ ${message}`;
+      logBox.appendChild(p);
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    client.on('connect', () => {
+      connBadge.className = 'px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+      connBadge.textContent = 'Broker: Terhubung (Online)';
+      appendLog('SYSTEM', 'Berhasil terkoneksi ke broker.emqx.io');
+
+      // Subscribe ke semua topik greenhouse (sg/#)
+      client.subscribe('sg/#', (err) => {
+        if (!err) {
+          appendLog('SYSTEM', 'Berlangganan ke topik: sg/#');
+        }
+      });
+    });
+
+    client.on('message', (topic, payload) => {
+      const msg = payload.toString();
+      appendLog(topic, msg);
+
+      // Routing data ke elemen tampilan
+      if (topic === 'sg/sensor/suhu') {
+        document.getElementById('val-suhu').textContent = msg;
+      } else if (topic === 'sg/sensor/kelembaban_udara') {
+        document.getElementById('val-hum').textContent = msg;
+      } else if (topic === 'sg/sensor/kelembaban_tanah') {
+        document.getElementById('val-tanah').textContent = msg;
+      } else if (topic === 'sg/aktuator/kipas') {
+        const badge = document.getElementById('badge-kipas');
+        badge.textContent = msg;
+        badge.className = msg === 'ON' 
+          ? 'px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30'
+          : 'px-3 py-1 rounded-full text-xs font-bold bg-slate-700 text-slate-400';
+      } else if (topic === 'sg/aktuator/pompa') {
+        const badge = document.getElementById('badge-pompa');
+        badge.textContent = msg;
+        badge.className = msg === 'ON' 
+          ? 'px-3 py-1 rounded-full text-xs font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30'
+          : 'px-3 py-1 rounded-full text-xs font-bold bg-slate-700 text-slate-400';
+      }
+    });
+
+    // Fungsi kirim perintah manual dari dashboard ke ESP32
+    function publishActuator(device, state) {
+      const topic = `sg/aktuator/${device}`;
+      client.publish(topic, state);
+      appendLog('COMMAND SENT', `${topic} = ${state}`);
+    }
+  </script>
+</body>
+</html>
