@@ -3,180 +3,746 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Smart Greenhouse Dashboard - CPS UGM</title>
-  <!-- Tailwind CSS CDN untuk tampilan modern -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- MQTT.js library untuk koneksi WebSocket ke MQTT Broker -->
+  <title>Smart Greenhouse Dashboard – CPS UGM</title>
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg:       #0b0f14;
+      --panel:    #111820;
+      --border:   #1e2d3d;
+      --muted:    #4a6880;
+      --text:     #c9d8e8;
+      --bright:   #e8f4ff;
+      --green:    #22c55e;
+      --yellow:   #f59e0b;
+      --red:      #ef4444;
+      --blue:     #3b82f6;
+      --cyan:     #06b6d4;
+      --teal:     #14b8a6;
+      --accent:   #16a34a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+    }
+
+    /* ── TOPBAR ─────────────────────────────── */
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 28px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 100;
+    }
+    .topbar-brand { display: flex; align-items: center; gap: 12px; }
+    .topbar-brand .logo {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, #16a34a, #06b6d4);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+    .topbar-brand .title { font-size: 17px; font-weight: 700; color: var(--bright); }
+    .topbar-brand .subtitle { font-size: 11px; color: var(--muted); }
+    .topbar-right { display: flex; align-items: center; gap: 16px; }
+    .conn-pill {
+      display: flex; align-items: center; gap: 6px;
+      padding: 5px 14px; border-radius: 99px; font-size: 12px; font-weight: 600;
+      border: 1px solid var(--border); background: #1a2530; transition: all 0.3s;
+    }
+    .conn-pill .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #ef4444; animation: none;
+    }
+    .conn-pill.connected .dot { background: var(--green); animation: pulse 2s infinite; }
+    .conn-pill.connected { border-color: #16a34a33; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; } 50% { opacity: 0.4; }
+    }
+    .clock { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+    /* ── LAYOUT ─────────────────────────────── */
+    .page { max-width: 1300px; margin: 0 auto; padding: 24px 28px; }
+
+    /* ── ALERT BANNER ───────────────────────── */
+    .alert-bar {
+      display: none; align-items: center; gap: 10px;
+      padding: 12px 18px; border-radius: 10px; margin-bottom: 20px;
+      background: #78350f22; border: 1px solid #f59e0b55;
+      color: var(--yellow); font-size: 13px;
+    }
+    .alert-bar.show { display: flex; }
+    .alert-bar.critical { background: #7f1d1d22; border-color: #ef444455; color: var(--red); }
+
+    /* ── SENSOR CARDS ───────────────────────── */
+    .cards-sensor { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
+    @media (max-width: 768px) { .cards-sensor { grid-template-columns: 1fr; } }
+
+    .sensor-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px 22px;
+      transition: border-color 0.3s;
+      position: relative; overflow: hidden;
+    }
+    .sensor-card::before {
+      content: ''; position: absolute;
+      top: 0; left: 0; right: 0; height: 3px;
+      border-radius: 14px 14px 0 0;
+    }
+    .sensor-card.temp::before   { background: linear-gradient(90deg, #f59e0b, #ef4444); }
+    .sensor-card.hum::before    { background: linear-gradient(90deg, #06b6d4, #3b82f6); }
+    .sensor-card.soil::before   { background: linear-gradient(90deg, #22c55e, #14b8a6); }
+
+    .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+    .card-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .card-icon {
+      width: 36px; height: 36px; border-radius: 9px;
+      display: flex; align-items: center; justify-content: center; font-size: 18px;
+    }
+    .temp .card-icon   { background: #f59e0b18; }
+    .hum  .card-icon   { background: #06b6d418; }
+    .soil .card-icon   { background: #22c55e18; }
+
+    .card-value { font-size: 42px; font-weight: 800; color: var(--bright); line-height: 1; letter-spacing: -1px; }
+    .card-unit  { font-size: 15px; color: var(--muted); margin-left: 4px; }
+    .card-status { margin-top: 10px; font-size: 12px; font-weight: 600; }
+    .card-hint { margin-top: 4px; font-size: 11px; color: var(--muted); }
+    .status-ok     { color: var(--green); }
+    .status-warn   { color: var(--yellow); }
+    .status-crit   { color: var(--red); }
+
+    /* Progress bar */
+    .progress-wrap { margin-top: 12px; height: 5px; background: #1e2d3d; border-radius: 99px; overflow: hidden; }
+    .progress-bar  { height: 100%; border-radius: 99px; transition: width 0.6s ease; }
+    .temp .progress-bar  { background: linear-gradient(90deg, #f59e0b, #ef4444); }
+    .hum  .progress-bar  { background: linear-gradient(90deg, #06b6d4, #3b82f6); }
+    .soil .progress-bar  { background: linear-gradient(90deg, #22c55e, #14b8a6); }
+
+    /* ── BOTTOM GRID ────────────────────────── */
+    .bottom-grid { display: grid; grid-template-columns: 1fr 1fr 360px; gap: 16px; margin-bottom: 20px; }
+    @media (max-width: 1100px) { .bottom-grid { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 700px)  { .bottom-grid { grid-template-columns: 1fr; } }
+
+    /* ── PANEL BASE ─────────────────────────── */
+    .panel {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px;
+    }
+    .panel-title {
+      font-size: 12px; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 16px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .panel-title svg { width: 14px; height: 14px; }
+
+    /* ── CHART PANELS ───────────────────────── */
+    .chart-wrap { position: relative; height: 160px; }
+
+    /* ── AKTUATOR PANEL ─────────────────────── */
+    .actuator-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .act-card {
+      background: #0d1825; border: 1px solid var(--border); border-radius: 12px;
+      padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 8px;
+      transition: border-color 0.3s;
+    }
+    .act-card.on { border-color: var(--green); background: #16a34a0d; }
+    .act-card.on .act-icon { background: #22c55e1a; color: var(--green); }
+    .act-icon {
+      width: 48px; height: 48px; border-radius: 12px;
+      background: #1e2d3d; display: flex; align-items: center; justify-content: center;
+      font-size: 22px; transition: all 0.3s;
+    }
+    .act-name { font-size: 13px; font-weight: 600; color: var(--bright); }
+    .act-badge {
+      font-size: 10px; font-weight: 700; padding: 2px 10px;
+      border-radius: 99px; background: #1e2d3d; color: var(--muted); letter-spacing: 0.05em;
+    }
+    .act-badge.on { background: #16a34a22; color: var(--green); border: 1px solid #22c55e44; }
+    .act-badge.emergency { background: #7f1d1d22; color: var(--red); border: 1px solid #ef444444; }
+    .act-gpio { font-size: 10px; color: var(--muted); }
+    .act-mode { font-size: 10px; color: var(--cyan); }
+
+    .act-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; width: 100%; }
+    .btn {
+      padding: 7px 0; border-radius: 8px; font-size: 11px; font-weight: 600;
+      cursor: pointer; border: 1px solid var(--border); transition: all 0.2s; text-align: center;
+    }
+    .btn-on  { background: #16a34a22; color: var(--green); border-color: #22c55e44; }
+    .btn-off { background: #1e2d3d; color: var(--muted); }
+    .btn:hover { filter: brightness(1.3); }
+
+    /* ── SYSTEM STATUS ───────────────────────── */
+    .sys-list { display: flex; flex-direction: column; gap: 10px; }
+    .sys-row { display: flex; justify-content: space-between; align-items: center; }
+    .sys-key { font-size: 12px; color: var(--muted); }
+    .sys-val { font-size: 12px; font-weight: 700; color: var(--bright); }
+    .sys-val.ok   { color: var(--green); }
+    .sys-val.warn { color: var(--yellow); }
+    .sys-val.err  { color: var(--red); }
+    hr.divider { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
+
+    /* ── METRICS ────────────────────────────── */
+    .metrics-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+    .metric-card {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+      padding: 14px 16px; display: flex; align-items: center; gap: 12px;
+    }
+    .metric-icon { font-size: 20px; }
+    .metric-label { font-size: 11px; color: var(--muted); }
+    .metric-value { font-size: 20px; font-weight: 800; color: var(--bright); }
+
+    /* ── MQTT LOG ────────────────────────────── */
+    .mqtt-log {
+      font-family: 'Consolas', 'Fira Code', monospace;
+      font-size: 11px; line-height: 1.6;
+      background: #080d12; border-radius: 10px;
+      padding: 12px 14px; height: 130px; overflow-y: auto;
+      border: 1px solid var(--border); color: #22c55e;
+    }
+    .mqtt-log .sys  { color: #4a6880; }
+    .mqtt-log .data { color: #22c55e; }
+    .mqtt-log .err  { color: #ef4444; }
+    .mqtt-log .cmd  { color: #f59e0b; }
+
+    /* ── SCROLLBAR ───────────────────────────── */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+  </style>
 </head>
-<body class="bg-slate-900 text-white min-h-screen p-6 font-sans">
-  <div class="max-w-5xl mx-auto">
-    <!-- Header -->
-    <header class="flex justify-between items-center border-b border-slate-700 pb-4 mb-6">
+<body>
+
+<!-- ═══════════════════ TOPBAR ═══════════════════ -->
+<div class="topbar">
+  <div class="topbar-brand">
+    <div class="logo">🌱</div>
+    <div>
+      <div class="title">Smart Greenhouse Monitor</div>
+      <div class="subtitle">Cyber Physical System · Universitas Gadjah Mada · 2026</div>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <span class="clock" id="clock">--:--:--</span>
+    <div class="conn-pill" id="conn-pill">
+      <span class="dot"></span>
+      <span id="conn-text">Menghubungkan...</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ MAIN PAGE ═══════════════════ -->
+<div class="page">
+
+  <!-- ALERT BANNER -->
+  <div class="alert-bar" id="alert-bar">
+    <span>⚠️</span>
+    <span id="alert-msg">Perangkat offline. Sistem beroperasi mandiri.</span>
+  </div>
+
+  <!-- ── SENSOR CARDS ── -->
+  <div class="cards-sensor">
+
+    <!-- Suhu Udara -->
+    <div class="sensor-card temp">
+      <div class="card-header">
+        <div class="card-label">Suhu Udara</div>
+        <div class="card-icon">🌡️</div>
+      </div>
       <div>
-        <h1 class="text-2xl font-bold text-emerald-400">🌱 Smart Greenhouse Monitoring</h1>
-        <p class="text-sm text-slate-400">Cyber Physical System & MQTT Architecture</p>
+        <span class="card-value" id="val-temp">--</span>
+        <span class="card-unit">°C</span>
       </div>
-      <div id="conn-badge" class="px-3 py-1 rounded-full text-xs font-semibold bg-red-500/20 text-red-400 border border-red-500/30">
-        Broker: Terputus
-      </div>
-    </header>
-
-    <!-- Kartu Status Sensor -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-      <!-- Suhu Udara -->
-      <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
-        <div class="flex items-center justify-between text-slate-400 mb-2">
-          <span>Suhu Udara (DHT22)</span>
-          <span class="text-xl">🌡️</span>
-        </div>
-        <div class="flex items-baseline gap-2">
-          <span id="val-suhu" class="text-4xl font-extrabold text-white">--</span>
-          <span class="text-slate-400 font-medium">°C</span>
-        </div>
-        <p class="text-xs text-slate-400 mt-3">Batas Kipas: > 35.0 °C (ON), ≤ 28.0 °C (OFF)</p>
-      </div>
-
-      <!-- Kelembaban Udara -->
-      <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
-        <div class="flex items-center justify-between text-slate-400 mb-2">
-          <span>Kelembaban Udara</span>
-          <span class="text-xl">💧</span>
-        </div>
-        <div class="flex items-baseline gap-2">
-          <span id="val-hum" class="text-4xl font-extrabold text-white">--</span>
-          <span class="text-slate-400 font-medium">%</span>
-        </div>
-        <p class="text-xs text-slate-400 mt-3">Sensor DHT22 Ambient</p>
-      </div>
-
-      <!-- Kelembaban Tanah -->
-      <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
-        <div class="flex items-center justify-between text-slate-400 mb-2">
-          <span>Kelembaban Tanah</span>
-          <span class="text-xl">🪴</span>
-        </div>
-        <div class="flex items-baseline gap-2">
-          <span id="val-tanah" class="text-4xl font-extrabold text-emerald-400">--</span>
-          <span class="text-slate-400 font-medium">%</span>
-        </div>
-        <p class="text-xs text-slate-400 mt-3">Batas Pompa: &lt; 30% (ON), ≥ 60% (OFF)</p>
-      </div>
+      <div class="card-status status-ok" id="status-temp">Menunggu data...</div>
+      <div class="card-hint">Kipas ON &gt; 35 °C · Kipas OFF ≤ 28 °C</div>
+      <div class="progress-wrap"><div class="progress-bar" id="bar-temp" style="width:0%"></div></div>
     </div>
 
-    <!-- Status Aktuator & Kendali Jarak Jauh -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-      <!-- Kipas -->
-      <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg flex flex-col justify-between">
-        <div class="flex justify-between items-start mb-4">
-          <div>
-            <h3 class="font-semibold text-lg text-white">Kipas Pendingin (12V)</h3>
-            <p class="text-xs text-slate-400">GPIO 27 - Pendingin Ruangan</p>
-          </div>
-          <span id="badge-kipas" class="px-3 py-1 rounded-full text-xs font-bold bg-slate-700 text-slate-400">
-            OFF
-          </span>
-        </div>
-        <div class="flex gap-3">
-          <button onclick="publishActuator('kipas', 'ON')" class="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-semibold text-sm transition">Manual ON</button>
-          <button onclick="publishActuator('kipas', 'OFF')" class="flex-1 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 font-semibold text-sm transition">Manual OFF</button>
-        </div>
+    <!-- Kelembaban Udara -->
+    <div class="sensor-card hum">
+      <div class="card-header">
+        <div class="card-label">Kelembaban Udara</div>
+        <div class="card-icon">💧</div>
       </div>
-
-      <!-- Pompa Air -->
-      <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg flex flex-col justify-between">
-        <div class="flex justify-between items-start mb-4">
-          <div>
-            <h3 class="font-semibold text-lg text-white">Pompa Air Irigasi (5V)</h3>
-            <p class="text-xs text-slate-400">GPIO 26 - Irigasi Tanah</p>
-          </div>
-          <span id="badge-pompa" class="px-3 py-1 rounded-full text-xs font-bold bg-slate-700 text-slate-400">
-            OFF
-          </span>
-        </div>
-        <div class="flex gap-3">
-          <button onclick="publishActuator('pompa', 'ON')" class="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-semibold text-sm transition">Manual ON</button>
-          <button onclick="publishActuator('pompa', 'OFF')" class="flex-1 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 font-semibold text-sm transition">Manual OFF</button>
-        </div>
+      <div>
+        <span class="card-value" id="val-hum">--</span>
+        <span class="card-unit">% RH</span>
       </div>
+      <div class="card-status status-ok" id="status-hum">Menunggu data...</div>
+      <div class="card-hint">Sensor DHT22 · Ambient Air</div>
+      <div class="progress-wrap"><div class="progress-bar" id="bar-hum" style="width:0%"></div></div>
     </div>
 
-    <!-- Log Pesan Masuk Real-Time -->
-    <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
-      <h3 class="font-semibold text-sm text-slate-300 mb-3">📡 Terminal Data Masuk (MQTT Live Log)</h3>
-      <div id="mqtt-log" class="bg-slate-950 p-4 rounded-xl font-mono text-xs text-emerald-400 h-36 overflow-y-auto space-y-1">
-        <p class="text-slate-500">// Menghubungkan ke broker.emqx.io...</p>
+    <!-- Kelembaban Tanah -->
+    <div class="sensor-card soil">
+      <div class="card-header">
+        <div class="card-label">Kelembaban Tanah</div>
+        <div class="card-icon">🪴</div>
+      </div>
+      <div>
+        <span class="card-value" id="val-soil">--</span>
+        <span class="card-unit">%</span>
+      </div>
+      <div class="card-status status-ok" id="status-soil">Menunggu data...</div>
+      <div class="card-hint">Pompa ON &lt; 30% · Pompa OFF ≥ 60%</div>
+      <div class="progress-wrap"><div class="progress-bar" id="bar-soil" style="width:0%"></div></div>
+    </div>
+
+  </div>
+
+  <!-- ── METRIC STRIP ── -->
+  <div class="metrics-row">
+    <div class="metric-card">
+      <div class="metric-icon">📦</div>
+      <div>
+        <div class="metric-label">Paket Diterima</div>
+        <div class="metric-value" id="m-received">0</div>
+      </div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-icon">⚡</div>
+      <div>
+        <div class="metric-label">Latensi Rata-rata</div>
+        <div class="metric-value" id="m-latency">-- ms</div>
+      </div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-icon">📈</div>
+      <div>
+        <div class="metric-label">Urutan Terakhir (seq)</div>
+        <div class="metric-value" id="m-seq">--</div>
       </div>
     </div>
   </div>
 
-  <script>
-    // Koneksi ke EMQX Cloud Broker via Secure WebSocket (Port 8084)
-    const brokerUrl = 'wss://broker.emqx.io:8084/mqtt';
-    const clientId = 'Dashboard_Fathoni_' + Math.random().toString(16).substring(2, 8);
+  <!-- ── BOTTOM GRID ── -->
+  <div class="bottom-grid">
 
-    const client = mqtt.connect(brokerUrl, {
-      clientId: clientId,
-      clean: true,
-      connectTimeout: 4000
-    });
+    <!-- Chart Suhu -->
+    <div class="panel">
+      <div class="panel-title">
+        <svg fill="none" viewBox="0 0 24 24" stroke="#f59e0b" stroke-width="2">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+        </svg>
+        Tren Suhu Udara (°C)
+      </div>
+      <div class="chart-wrap"><canvas id="chart-temp"></canvas></div>
+      <div style="font-size:10px; color:var(--muted); margin-top:8px;">
+        Garis merah: batas kipas ON (35°C) · Garis kuning: batas OFF (28°C)
+      </div>
+    </div>
 
-    const connBadge = document.getElementById('conn-badge');
-    const logBox = document.getElementById('mqtt-log');
+    <!-- Chart Tanah -->
+    <div class="panel">
+      <div class="panel-title">
+        <svg fill="none" viewBox="0 0 24 24" stroke="#22c55e" stroke-width="2">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+        </svg>
+        Tren Kelembaban Tanah (%)
+      </div>
+      <div class="chart-wrap"><canvas id="chart-soil"></canvas></div>
+      <div style="font-size:10px; color:var(--muted); margin-top:8px;">
+        Garis merah: batas pompa ON (30%) · Garis kuning: batas OFF (60%)
+      </div>
+    </div>
 
-    function appendLog(topic, message) {
-      const p = document.createElement('p');
-      const time = new Date().toLocaleTimeString();
-      p.textContent = `[${time}] ${topic} ➔ ${message}`;
-      logBox.appendChild(p);
-      logBox.scrollTop = logBox.scrollHeight;
-    }
+    <!-- Aktuator + System Status -->
+    <div style="display:flex; flex-direction:column; gap:16px;">
 
-    client.on('connect', () => {
-      connBadge.className = 'px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
-      connBadge.textContent = 'Broker: Terhubung (Online)';
-      appendLog('SYSTEM', 'Berhasil terkoneksi ke broker.emqx.io');
+      <!-- Aktuator -->
+      <div class="panel">
+        <div class="panel-title">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/><path d="M19.07 4.93A10 10 0 1 0 4.93 19.07"/>
+          </svg>
+          Status Aktuator
+        </div>
+        <div class="actuator-grid">
+          <!-- Kipas -->
+          <div class="act-card" id="act-fan">
+            <div class="act-icon" id="icon-fan">🌀</div>
+            <div class="act-name">Kipas</div>
+            <span class="act-badge" id="badge-fan">OFF</span>
+            <div class="act-gpio">GPIO 27 · 12V</div>
+            <div class="act-mode" id="mode-fan">mode: auto</div>
+            <div class="act-btns">
+              <div class="btn btn-on" onclick="sendCmd('FAN_ON')">▶ ON</div>
+              <div class="btn btn-off" onclick="sendCmd('FAN_OFF')">■ OFF</div>
+            </div>
+          </div>
+          <!-- Pompa -->
+          <div class="act-card" id="act-pump">
+            <div class="act-icon" id="icon-pump">💧</div>
+            <div class="act-name">Pompa</div>
+            <span class="act-badge" id="badge-pump">OFF</span>
+            <div class="act-gpio">GPIO 26 · 5V</div>
+            <div class="act-mode" id="mode-pump">mode: auto</div>
+            <div class="act-btns">
+              <div class="btn btn-on" onclick="sendCmd('PUMP_ON')">▶ ON</div>
+              <div class="btn btn-off" onclick="sendCmd('PUMP_OFF')">■ OFF</div>
+            </div>
+          </div>
+        </div>
+      </div>
 
-      // Subscribe ke semua topik greenhouse (sg/#)
-      client.subscribe('sg/#', (err) => {
-        if (!err) {
-          appendLog('SYSTEM', 'Berlangganan ke topik: sg/#');
-        }
-      });
-    });
+      <!-- System Status -->
+      <div class="panel">
+        <div class="panel-title">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+          </svg>
+          Status Sistem
+        </div>
+        <div class="sys-list">
+          <div class="sys-row">
+            <span class="sys-key">Koneksi ESP32</span>
+            <span class="sys-val" id="sys-esp">offline</span>
+          </div>
+          <hr class="divider">
+          <div class="sys-row">
+            <span class="sys-key">E-Stop</span>
+            <span class="sys-val ok" id="sys-estop">Tidak Aktif</span>
+          </div>
+          <hr class="divider">
+          <div class="sys-row">
+            <span class="sys-key">Sensor Fault</span>
+            <span class="sys-val ok" id="sys-fault">Normal</span>
+          </div>
+          <hr class="divider">
+          <div class="sys-row">
+            <span class="sys-key">Pembaruan terakhir</span>
+            <span class="sys-val" id="sys-last">–</span>
+          </div>
+        </div>
+      </div>
 
-    client.on('message', (topic, payload) => {
-      const msg = payload.toString();
-      appendLog(topic, msg);
+    </div>
+  </div>
 
-      // Routing data ke elemen tampilan
-      if (topic === 'sg/sensor/suhu') {
-        document.getElementById('val-suhu').textContent = msg;
-      } else if (topic === 'sg/sensor/kelembaban_udara') {
-        document.getElementById('val-hum').textContent = msg;
-      } else if (topic === 'sg/sensor/kelembaban_tanah') {
-        document.getElementById('val-tanah').textContent = msg;
-      } else if (topic === 'sg/aktuator/kipas') {
-        const badge = document.getElementById('badge-kipas');
-        badge.textContent = msg;
-        badge.className = msg === 'ON' 
-          ? 'px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30'
-          : 'px-3 py-1 rounded-full text-xs font-bold bg-slate-700 text-slate-400';
-      } else if (topic === 'sg/aktuator/pompa') {
-        const badge = document.getElementById('badge-pompa');
-        badge.textContent = msg;
-        badge.className = msg === 'ON' 
-          ? 'px-3 py-1 rounded-full text-xs font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30'
-          : 'px-3 py-1 rounded-full text-xs font-bold bg-slate-700 text-slate-400';
+  <!-- ── MQTT LOG ── -->
+  <div class="panel">
+    <div class="panel-title">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
+      </svg>
+      Terminal MQTT Live · greenhouse/#
+    </div>
+    <div class="mqtt-log" id="mqtt-log">
+      <span class="sys">// Menghubungkan ke broker.emqx.io via WSS:8084...</span>
+    </div>
+  </div>
+
+</div><!-- /page -->
+
+<script>
+/* ─────────────────────────────────
+   CONFIG
+───────────────────────────────── */
+const CFG = {
+  BROKER: 'wss://broker.emqx.io:8084/mqtt',
+  TEMP_ON:  35, TEMP_OFF: 28,
+  PUMP_ON:  30, PUMP_OFF: 60,
+  MAX_PTS: 60,
+};
+
+/* ─────────────────────────────────
+   CLOCK
+───────────────────────────────── */
+setInterval(() => {
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('id-ID');
+}, 1000);
+
+/* ─────────────────────────────────
+   CHART SETUP
+───────────────────────────────── */
+function makeChart(id, label, color, fanLines) {
+  const ctx = document.getElementById(id).getContext('2d');
+  const annotations = fanLines
+    ? [
+        { value: CFG.TEMP_ON,  color: '#ef4444' },
+        { value: CFG.TEMP_OFF, color: '#f59e0b' },
+      ]
+    : [
+        { value: CFG.PUMP_ON,  color: '#ef4444' },
+        { value: CFG.PUMP_OFF, color: '#f59e0b' },
+      ];
+
+  return new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        {
+          label, data: [],
+          borderColor: color,
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.4,
+          fill: true,
+          backgroundColor: color + '15',
+        },
+        ...annotations.map(a => ({
+          label: '', data: [],
+          borderColor: a.color,
+          borderWidth: 1,
+          borderDash: [4, 4],
+          pointRadius: 0,
+        }))
+      ]
+    },
+    options: {
+      animation: false,
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+      scales: {
+        x: { ticks: { color: '#4a6880', font: { size: 10 } }, grid: { color: '#1e2d3d' } },
+        y: { ticks: { color: '#4a6880', font: { size: 10 } }, grid: { color: '#1e2d3d' } },
       }
-    });
-
-    // Fungsi kirim perintah manual dari dashboard ke ESP32
-    function publishActuator(device, state) {
-      const topic = `sg/aktuator/${device}`;
-      client.publish(topic, state);
-      appendLog('COMMAND SENT', `${topic} = ${state}`);
     }
-  </script>
+  });
+}
+
+const chartTemp = makeChart('chart-temp', 'Suhu (°C)', '#f59e0b', true);
+const chartSoil = makeChart('chart-soil', 'Kelembaban Tanah (%)', '#22c55e', false);
+
+function pushChart(chart, label, value, lines) {
+  const MAX = CFG.MAX_PTS;
+  const push = (ds, v) => { ds.push(v); if (ds.length > MAX) ds.shift(); };
+  push(chart.data.labels, label);
+  push(chart.data.datasets[0].data, value);
+  // annotation lines: fill up to same length
+  for (let i = 1; i < chart.data.datasets.length; i++) {
+    const annVal = lines[i - 1];
+    push(chart.data.datasets[i].data, annVal);
+  }
+  chart.update('none');
+}
+
+/* ─────────────────────────────────
+   LOG
+───────────────────────────────── */
+const logBox = document.getElementById('mqtt-log');
+function log(cls, msg) {
+  const line = document.createElement('div');
+  const ts = new Date().toLocaleTimeString('id-ID');
+  line.innerHTML = `<span style="color:#4a6880">[${ts}]</span> <span class="${cls}">${msg}</span>`;
+  logBox.appendChild(line);
+  logBox.scrollTop = logBox.scrollHeight;
+  // keep max 80 lines
+  while (logBox.children.length > 80) logBox.removeChild(logBox.firstChild);
+}
+
+/* ─────────────────────────────────
+   UI HELPERS
+───────────────────────────────── */
+function setConnected(ok) {
+  const pill = document.getElementById('conn-pill');
+  const txt  = document.getElementById('conn-text');
+  if (ok) {
+    pill.classList.add('connected');
+    txt.textContent = 'Broker terhubung (broker.emqx.io)';
+  } else {
+    pill.classList.remove('connected');
+    txt.textContent = ok === null ? 'Menghubungkan...' : 'Broker terputus';
+  }
+}
+
+function updateSensor(id, val, unit) {
+  document.getElementById(id).textContent = val !== null ? val : '--';
+}
+
+function setBar(id, pct) {
+  document.getElementById(id).style.width = Math.min(100, Math.max(0, pct)) + '%';
+}
+
+function setStatusText(id, text, cls) {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.className = 'card-status ' + cls;
+}
+
+function setActuator(name, isOn) {
+  const card  = document.getElementById('act-' + name);
+  const badge = document.getElementById('badge-' + name);
+  if (isOn) {
+    card.classList.add('on');
+    badge.className = 'act-badge on';
+    badge.textContent = 'ON';
+  } else {
+    card.classList.remove('on');
+    badge.className = 'act-badge';
+    badge.textContent = 'OFF';
+  }
+}
+
+function setSystemStatus(online, fault, estop) {
+  const espEl   = document.getElementById('sys-esp');
+  const faultEl = document.getElementById('sys-fault');
+  const estopEl = document.getElementById('sys-estop');
+
+  espEl.textContent  = online ? 'online' : 'offline';
+  espEl.className    = 'sys-val ' + (online ? 'ok' : 'err');
+
+  faultEl.textContent = fault ? 'FAULT' : 'Normal';
+  faultEl.className   = 'sys-val ' + (fault ? 'err' : 'ok');
+
+  estopEl.textContent = estop ? 'AKTIF ⚠️' : 'Tidak Aktif';
+  estopEl.className   = 'sys-val ' + (estop ? 'err' : 'ok');
+
+  // Alert banner
+  const bar = document.getElementById('alert-bar');
+  if (estop) {
+    bar.className = 'alert-bar show critical';
+    document.getElementById('alert-msg').textContent = '🛑 EMERGENCY STOP aktif! Seluruh aktuator dimatikan.';
+  } else if (!online) {
+    bar.className = 'alert-bar show';
+    document.getElementById('alert-msg').textContent = '⚠️ ESP32 offline. Sistem kontrol lokal tetap berjalan (Fail-Safe mode).';
+  } else if (fault) {
+    bar.className = 'alert-bar show critical';
+    document.getElementById('alert-msg').textContent = '⚠️ Sensor fault terdeteksi! Periksa koneksi sensor DHT22.';
+  } else {
+    bar.className = 'alert-bar';
+  }
+}
+
+/* ─────────────────────────────────
+   METRICS
+───────────────────────────────── */
+let rxCount = 0, lastSeq = null, latSum = 0, latN = 0;
+
+function updateMetrics(seq, ts) {
+  rxCount++;
+  document.getElementById('m-received').textContent = rxCount;
+  document.getElementById('m-seq').textContent = seq !== undefined ? seq : '--';
+
+  if (ts) {
+    const now = Math.floor(Date.now() / 1000);
+    const lat  = Math.abs(now - ts) * 1000; // rough ms estimate
+    if (lat < 30000) { // only credible values
+      latSum += lat; latN++;
+      document.getElementById('m-latency').textContent = Math.round(latSum / latN) + ' ms';
+    }
+  }
+}
+
+/* ─────────────────────────────────
+   MQTT
+───────────────────────────────── */
+let client;
+let lastDataTime = null;
+
+function connect() {
+  setConnected(null);
+  client = mqtt.connect(CFG.BROKER, {
+    clientId: 'GH_Dashboard_' + Math.random().toString(16).slice(2, 8),
+    reconnectPeriod: 3000,
+    clean: true,
+  });
+
+  client.on('connect', () => {
+    setConnected(true);
+    log('sys', '✓ Terhubung ke broker.emqx.io:8084 (WSS)');
+    client.subscribe('greenhouse/#', { qos: 1 });
+    log('sys', '✓ Subscribe: greenhouse/#');
+  });
+  client.on('reconnect', () => {
+    setConnected(false);
+    log('err', '↻ Mencoba sambung ulang ke broker...');
+  });
+  client.on('close', () => {
+    setConnected(false);
+  });
+  client.on('error', (e) => log('err', '✗ Error: ' + e.message));
+
+  client.on('message', (topic, buf) => {
+    const raw = buf.toString();
+    log('data', topic + ' → ' + raw);
+
+    let p;
+    try { p = JSON.parse(raw); } catch { return; }
+
+    const now = new Date().toLocaleTimeString('id-ID');
+    lastDataTime = now;
+    document.getElementById('sys-last').textContent = now;
+
+    /* ── greenhouse/sensor/data ── */
+    if (topic === 'greenhouse/sensor/data') {
+      updateMetrics(p.seq, p.ts);
+
+      if (p.temp !== null && p.temp !== undefined) {
+        updateSensor('val-temp', p.temp.toFixed(1));
+        setBar('bar-temp', (p.temp / 50) * 100);
+        if (p.temp > CFG.TEMP_ON)       setStatusText('status-temp', '🔴 Kritis! Suhu tinggi – Kipas menyala', 'card-status status-crit');
+        else if (p.temp > CFG.TEMP_OFF) setStatusText('status-temp', '🟡 Normal – Dalam rentang operasi', 'card-status status-warn');
+        else                            setStatusText('status-temp', '🟢 Optimal – Suhu rendah', 'card-status status-ok');
+        pushChart(chartTemp, now, p.temp, [CFG.TEMP_ON, CFG.TEMP_OFF]);
+      }
+
+      if (p.hum !== null && p.hum !== undefined) {
+        updateSensor('val-hum', p.hum.toFixed(1));
+        setBar('bar-hum', p.hum);
+        setStatusText('status-hum', p.hum > 40 ? '🟢 Normal' : '🟡 Kelembaban rendah', p.hum > 40 ? 'card-status status-ok' : 'card-status status-warn');
+      }
+
+      if (p.soil !== null && p.soil !== undefined) {
+        updateSensor('val-soil', p.soil);
+        setBar('bar-soil', p.soil);
+        if (p.soil < CFG.PUMP_ON)       setStatusText('status-soil', '🔴 Kritis! Tanah kering – Pompa menyala', 'card-status status-crit');
+        else if (p.soil < CFG.PUMP_OFF) setStatusText('status-soil', '🟡 Di luar rentang optimal', 'card-status status-warn');
+        else                            setStatusText('status-soil', '🟢 Lembab – Kondisi optimal', 'card-status status-ok');
+        pushChart(chartSoil, now, p.soil, [CFG.PUMP_ON, CFG.PUMP_OFF]);
+      }
+    }
+
+    /* ── greenhouse/actuator/status ── */
+    if (topic === 'greenhouse/actuator/status') {
+      setActuator('fan',  p.fan === true);
+      setActuator('pump', p.pump === true);
+      document.getElementById('mode-fan').textContent  = 'mode: ' + (p.mode || 'auto');
+      document.getElementById('mode-pump').textContent = 'mode: ' + (p.mode || 'auto');
+      if (p.estop) {
+        document.getElementById('badge-fan').className  = 'act-badge emergency';
+        document.getElementById('badge-pump').className = 'act-badge emergency';
+      }
+    }
+
+    /* ── greenhouse/system/status ── */
+    if (topic === 'greenhouse/system/status') {
+      const online = p.state === 'online';
+      setSystemStatus(online, p.sensor_fault === true, false);
+    }
+
+    /* ── greenhouse/alert ── */
+    if (topic === 'greenhouse/alert') {
+      const isEstop = p.code === 'ESTOP';
+      if (isEstop) setSystemStatus(true, false, true);
+      log('err', `⚠ ALERT [${p.level}] ${p.code}: ${p.message}`);
+    }
+  });
+}
+
+/* ─────────────────────────────────
+   SEND COMMAND (Downlink)
+───────────────────────────────── */
+function sendCmd(action) {
+  if (!client || !client.connected) {
+    log('err', '✗ Tidak terhubung ke broker. Perintah dibatalkan.');
+    return;
+  }
+  const payload = JSON.stringify({ action });
+  client.publish('greenhouse/actuator/command', payload, { qos: 1 });
+  log('cmd', '▶ COMMAND SENT: greenhouse/actuator/command → ' + payload);
+}
+
+/* ─────────────────────────────────
+   BOOT
+───────────────────────────────── */
+connect();
+</script>
 </body>
 </html>
