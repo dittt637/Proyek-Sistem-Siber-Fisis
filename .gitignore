@@ -1,0 +1,13 @@
+# Scratch and temporary directories
+scratch_fathoni/
+node_modules/
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+
+# OS / Editor files
+.DS_Store
+Thumbs.db
+.vscode/

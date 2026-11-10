@@ -1,0 +1,14 @@
+{
+  "name": "smart-greenhouse-dashboard",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file=.env server.js",
+    "sim": "node --env-file=.env simulator.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "latest",
+    "express": "^4.19.0",
+    "mqtt": "^5.10.0"
+  }
+}

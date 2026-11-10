@@ -49,8 +49,8 @@ const unsigned long MQTT_RETRY_INT   = 5000;  // Interval percobaan reconnect MQ
 // 3. NETWORK & MQTT CONFIGURATION (ADITYA)
 // ==========================================
 // GANTI DENGAN NAMA HOTSPOT / WIFI ANDA:
-const char* WIFI_SSID     = "NAMA_HOTSPOT_ANDA"; 
-const char* WIFI_PASSWORD = "PASSWORD_HOTSPOT";  
+const char* WIFI_SSID     = "MONITORING-ESP32"; 
+const char* WIFI_PASSWORD = "esp32monitor";  
 
 // Cloud Public Broker (Menggantikan IP Lokal 192.168.1.100 Harits)
 const char* MQTT_SERVER   = "broker.emqx.io";
