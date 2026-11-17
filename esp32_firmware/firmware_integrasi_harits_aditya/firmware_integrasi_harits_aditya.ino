@@ -1,16 +1,19 @@
 /*
  * ============================================================================
- * FIRMWARE SMART GREENHOUSE ESP32 - INTEGRASI EMBEDDED & NETWORK IoT
+ * FIRMWARE SMART GREENHOUSE ESP32 - INTEGRASI EMBEDDED, MQTT & UDP DUAL-STACK
  * Kolaborasi : Harits (Embedded & Control) + Aditya Rahman (Network & IoT)
  * Hardware   : DHT22 (Pin 4), Soil Moisture (Pin 34), Kipas (Pin 27), Pompa (Pin 26)
  * Keamanan   : E-Stop Physical Switch (Pin 14) - Active LOW Interrupt
- * Protokol   : MQTT via Cloud Public Broker (broker.emqx.io:1883)
+ * Protokol   : Dual-Stack:
+ *              1. MQTT via Cloud Public Broker (broker.emqx.io:1883)
+ *              2. UDP Broadcast & Receiver Lokal (Port: 4210, Broadcast: 255.255.255.255)
  * Kontrak    : SPEC.md Versi 2.1.0 (Full JSON Payload + LWT + Alert)
  * ============================================================================
  */
 
 #include <WiFi.h>
 #include <PubSubClient.h>
+#include <WiFiUdp.h>
 #include <time.h>
 #include "DHT.h"
 
@@ -46,15 +49,20 @@ const unsigned long SENSOR_INTERVAL  = 2000;  // Interval publish sensor (2 deti
 const unsigned long MQTT_RETRY_INT   = 5000;  // Interval percobaan reconnect MQTT (5 detik)
 
 // ==========================================
-// 3. NETWORK & MQTT CONFIGURATION (ADITYA)
+// 3. NETWORK CONFIGURATION (MQTT & UDP)
 // ==========================================
 // GANTI DENGAN NAMA HOTSPOT / WIFI ANDA:
 const char* WIFI_SSID     = "MONITORING-ESP32"; 
 const char* WIFI_PASSWORD = "esp32monitor";  
 
-// Cloud Public Broker (Menggantikan IP Lokal 192.168.1.100 Harits)
+// Cloud Public Broker MQTT
 const char* MQTT_SERVER   = "broker.emqx.io";
 const int   MQTT_PORT     = 1883;
+
+// Konfigurasi UDP Lokal (Real-time Broadcast & Remote Control)
+WiFiUDP udp;
+const int   UDP_PORT         = 4210;                // Port UDP lokal
+const char* UDP_BROADCAST_IP = "255.255.255.255";   // Broadcast ke seluruh perangkat di WiFi
 
 // Daftar Topik Resmi SPEC.md
 const char* TOPIC_SENSOR_DATA     = "greenhouse/sensor/data";
@@ -104,6 +112,8 @@ int getMedianFilteredADC(int rawAdc);
 float getMovingAverageADC(float medianAdc);
 float convertADCToMoisture(float adcFiltered);
 void handleNetworkNonBlocking();
+void handleUDP();
+void broadcastUDP(const char* message);
 void mqttCallback(char* topic, byte* payload, unsigned int length);
 time_t getEpochTime();
 void publishSensorData(float temp, float hum, int soil, bool dhtFault);
@@ -141,15 +151,19 @@ void setup() {
   WiFi.setAutoReconnect(true);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
-  // Konfigurasi Client MQTT
+  // Inisialisasi MQTT Client
   mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
   mqttClient.setCallback(mqttCallback);
+
+  // Inisialisasi Socket UDP Lokal
+  udp.begin(UDP_PORT);
 
   // Sinkronisasi Waktu NTP (WIB UTC+7) untuk Timestamp SPEC.md
   configTime(7 * 3600, 0, "pool.ntp.org", "time.nist.gov");
 
   Serial.println("\n==================================================");
-  Serial.println("  SMART GREENHOUSE - INTEGRASI EMBEDDED + MQTT    ");
+  Serial.println("  SMART GREENHOUSE - DUAL-STACK MQTT & UDP READY  ");
+  Serial.printf("  UDP Broadcast & Listener aktif pada Port: %d\n", UDP_PORT);
   Serial.println("==================================================");
 }
 
@@ -166,7 +180,10 @@ void loop() {
   // 2. KONEKSI NETWORK FAIL-SAFE (NON-BLOCKING)
   handleNetworkNonBlocking();
 
-  // 3. PEMBACAAN SENSOR & KONTROL LOKAL (SETIAP 2 DETIK)
+  // 3. LISTEN & EKSEKUSI PERINTAH UDP DARI LAPTOP/JARINGAN LOKAL
+  handleUDP();
+
+  // 4. PEMBACAAN SENSOR & KONTROL LOKAL (SETIAP 2 DETIK)
   unsigned long currentMillis = millis();
   if (currentMillis - lastSensorRead >= SENSOR_INTERVAL) {
     lastSensorRead = currentMillis;
@@ -187,7 +204,7 @@ void loop() {
     // Proses Algoritma Histeresis & Pengaman Pompa
     processControlLogic(temp, hum, moisture, dhtFault, soilFault);
 
-    // Kirim Data Telemetri JSON ke MQTT Broker
+    // Kirim Data Telemetri JSON ke MQTT Broker & UDP Broadcast
     publishSensorData(temp, hum, soilInt, dhtFault);
 
     // Kirim Update Status Aktuator jika terjadi perubahan kondisi fisik
@@ -205,7 +222,7 @@ void loop() {
 }
 
 // ==========================================
-// PENGELOLAAN NETWORK & MQTT (ADITYA)
+// PENGELOLAAN NETWORK: MQTT & UDP (ADITYA)
 // ==========================================
 
 void handleNetworkNonBlocking() {
@@ -246,7 +263,52 @@ void handleNetworkNonBlocking() {
 }
 
 /**
- * Callback Pesan Masuk (Komunikasi Dua Arah / Downlink Control)
+ * Mengirim pesan string/JSON melalui UDP Broadcast ke seluruh jaringan lokal
+ */
+void broadcastUDP(const char* message) {
+  if (WiFi.status() == WL_CONNECTED) {
+    udp.beginPacket(UDP_BROADCAST_IP, UDP_PORT);
+    udp.write((const uint8_t*)message, strlen(message));
+    udp.endPacket();
+  }
+}
+
+/**
+ * Menerima instruksi kendali aktuator dari UDP lokal (Port 4210)
+ */
+void handleUDP() {
+  int packetSize = udp.parsePacket();
+  if (packetSize) {
+    char packetBuffer[256];
+    int len = udp.read(packetBuffer, sizeof(packetBuffer) - 1);
+    if (len > 0) {
+      packetBuffer[len] = '\0';
+    }
+    String message = String(packetBuffer);
+    Serial.printf("[UDP RECV] Dari %s:%d -> %s\n", udp.remoteIP().toString().c_str(), udp.remotePort(), packetBuffer);
+
+    // Kontrol aktuator melalui UDP (downlink lokal)
+    if (message.indexOf("\"action\":\"FAN_ON\"") >= 0 || message.indexOf("\"fan\":\"ON\"") >= 0) {
+      setFan(true);
+      publishActuatorStatus();
+    } else if (message.indexOf("\"action\":\"FAN_OFF\"") >= 0 || message.indexOf("\"fan\":\"OFF\"") >= 0) {
+      setFan(false);
+      publishActuatorStatus();
+    } else if (message.indexOf("\"action\":\"PUMP_ON\"") >= 0 || message.indexOf("\"pump\":\"ON\"") >= 0) {
+      if (!isPumpLocked) {
+        setPump(true);
+        pumpStartTime = millis();
+        publishActuatorStatus();
+      }
+    } else if (message.indexOf("\"action\":\"PUMP_OFF\"") >= 0 || message.indexOf("\"pump\":\"OFF\"") >= 0) {
+      setPump(false);
+      publishActuatorStatus();
+    }
+  }
+}
+
+/**
+ * Callback Pesan Masuk MQTT (Komunikasi Dua Arah / Downlink Control)
  */
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   String message = "";
@@ -255,7 +317,6 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   }
   Serial.printf("[MQTT RECV] Topik: %s | Pesan: %s\n", topic, message.c_str());
 
-  // Parser perintah sederhana untuk kontrol manual dari Dashboard / MQTTX
   if (String(topic) == TOPIC_ACTUATOR_CMD) {
     if (message.indexOf("\"fan\":\"ON\"") >= 0 || message.indexOf("\"action\":\"FAN_ON\"") >= 0) {
       setFan(true);
@@ -283,11 +344,9 @@ time_t getEpochTime() {
 }
 
 /**
- * Topic 1: greenhouse/sensor/data (QoS 1, Retain: false)
+ * Topic 1: greenhouse/sensor/data (QoS 1, Retain: false) + UDP Broadcast
  */
 void publishSensorData(float temp, float hum, int soil, bool dhtFault) {
-  if (!mqttClient.connected()) return;
-
   seqNumber++;
   time_t ts = getEpochTime();
   char payload[160];
@@ -304,15 +363,19 @@ void publishSensorData(float temp, float hum, int soil, bool dhtFault) {
              temp, hum, soil, seqNumber, (unsigned long)ts);
   }
 
-  mqttClient.publish(TOPIC_SENSOR_DATA, payload, false);
+  // 1. Kirim ke Cloud MQTT
+  if (mqttClient.connected()) {
+    mqttClient.publish(TOPIC_SENSOR_DATA, payload, false);
+  }
+
+  // 2. Pancarkan ke UDP Broadcast Lokal
+  broadcastUDP(payload);
 }
 
 /**
- * Topic 2: greenhouse/actuator/status (QoS 1, Retain: true)
+ * Topic 2: greenhouse/actuator/status (QoS 1, Retain: true) + UDP Broadcast
  */
 void publishActuatorStatus() {
-  if (!mqttClient.connected()) return;
-
   time_t ts = getEpochTime();
   char payload[160];
   const char* modeStr = isEstopActive ? "emergency" : (WiFi.status() == WL_CONNECTED ? "auto" : "offline");
@@ -325,37 +388,42 @@ void publishActuatorStatus() {
            isEstopActive ? "true" : "false",
            (unsigned long)ts);
 
-  mqttClient.publish(TOPIC_ACTUATOR_STATUS, payload, true);
+  if (mqttClient.connected()) {
+    mqttClient.publish(TOPIC_ACTUATOR_STATUS, payload, true);
+  }
+  broadcastUDP(payload);
 }
 
 /**
- * Topic 3: greenhouse/system/status (QoS 1, Retain: true)
+ * Topic 3: greenhouse/system/status (QoS 1, Retain: true) + UDP Broadcast
  */
 void publishSystemStatus(bool online, bool sensorFault) {
-  if (!mqttClient.connected()) return;
-
   char payload[80];
   snprintf(payload, sizeof(payload),
            "{\"state\":\"%s\",\"sensor_fault\":%s}",
            online ? "online" : "offline",
            sensorFault ? "true" : "false");
 
-  mqttClient.publish(TOPIC_SYSTEM_STATUS, payload, true);
+  if (mqttClient.connected()) {
+    mqttClient.publish(TOPIC_SYSTEM_STATUS, payload, true);
+  }
+  broadcastUDP(payload);
 }
 
 /**
- * Topic 4: greenhouse/alert (QoS 1, Retain: false)
+ * Topic 4: greenhouse/alert (QoS 1, Retain: false) + UDP Broadcast
  */
 void publishAlert(const char* level, const char* code, const char* message) {
-  if (!mqttClient.connected()) return;
-
   time_t ts = getEpochTime();
   char payload[200];
   snprintf(payload, sizeof(payload),
            "{\"level\":\"%s\",\"code\":\"%s\",\"message\":\"%s\",\"ts\":%lu}",
            level, code, message, (unsigned long)ts);
 
-  mqttClient.publish(TOPIC_ALERT, payload, false);
+  if (mqttClient.connected()) {
+    mqttClient.publish(TOPIC_ALERT, payload, false);
+  }
+  broadcastUDP(payload);
 }
 
 // ==========================================
